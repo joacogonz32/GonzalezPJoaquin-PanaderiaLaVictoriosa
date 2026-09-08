@@ -1,0 +1,361 @@
+{
+  "info": {
+    "_postman_id": "b5b9a4f0-1a2b-4c3d-9e8f-panaderia0001",
+    "name": "Panadería La Victoriosa - API",
+    "description": "Colección para probar el CRUD de Producto y el manejo centralizado de errores del backend (MVC + Express + persistencia en memoria).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "productoId", "value": "", "type": "string" },
+    { "key": "productoDuplicadoId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Producto - CRUD",
+      "item": [
+        {
+          "name": "1. Obtener todos los productos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success es true y data es un array', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. Crear producto",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Medialuna de manteca\",\n  \"descripcion\": \"Clásica, hojaldrada\",\n  \"precio\": 300,\n  \"stock\": 50,\n  \"categoria\": \"Facturas\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('devuelve el producto creado con id', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data).to.have.property('id');",
+                  "    pm.collectionVariables.set('productoId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. Obtener producto por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/{{productoId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos", "{{productoId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('el id coincide', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(String(json.data.id)).to.eql(pm.collectionVariables.get('productoId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4. Actualizar producto (stock)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stock\": 80\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/{{productoId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos", "{{productoId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('el stock se actualizo a 80', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.stock).to.eql(80);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5. Eliminar producto",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/{{productoId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos", "{{productoId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('success es true', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Casos de error",
+      "item": [
+        {
+          "name": "Producto inexistente (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos", "999999"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('formato de error consistente', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.eql('El producto no existe.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Datos invalidos (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Producto sin precio ni stock\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('mensaje de datos invalidos', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.eql('Los datos enviados son inválidos.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Crear producto para duplicar",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Producto Prueba Duplicado\",\n  \"descripcion\": \"Usado solo para probar el caso 409\",\n  \"precio\": 100,\n  \"stock\": 10,\n  \"categoria\": \"Facturas\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('guarda el id para poder limpiarlo despues', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('productoDuplicadoId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Recurso duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Producto Prueba Duplicado\",\n  \"descripcion\": \"Usado solo para probar el caso 409\",\n  \"precio\": 100,\n  \"stock\": 10,\n  \"categoria\": \"Facturas\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('mensaje de recurso duplicado', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.eql('El recurso ya existe.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Limpiar producto de prueba (duplicado)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/{{productoDuplicadoId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "productos", "{{productoDuplicadoId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Ruta inexistente (404 generico)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/no-existe",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "no-existe"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('mensaje de ruta no encontrada', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.eql('La ruta solicitada no existe.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}
