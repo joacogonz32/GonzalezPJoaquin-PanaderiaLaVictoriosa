@@ -1,0 +1,261 @@
+/* ═══════════════════════════════
+   ESTRUCTURA GENERAL DE PÁGINAS
+═══════════════════════════════ */
+.page {
+  padding: 72px 48px 96px;
+}
+
+.page--cream {
+  background: var(--cream);
+}
+
+.page__container {
+  max-width: var(--content-width);
+  margin: 0 auto;
+}
+
+.page__container--narrow {
+  max-width: 480px;
+}
+
+.page__container--medium {
+  max-width: 820px;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 48px 16px 72px;
+  }
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.toolbar__filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar__filters .field {
+  min-width: 190px;
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.results-count {
+  font-size: 13.5px;
+  color: var(--choco-mid);
+  margin-bottom: 16px;
+}
+
+/* ═══════════════════════════════
+   INICIO
+═══════════════════════════════ */
+.home-section {
+  padding: 108px 48px;
+}
+
+.home-section--cream {
+  background: var(--cream);
+}
+
+.sobre__inner {
+  max-width: 680px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.sobre__inner p {
+  font-size: 16.5px;
+  line-height: 1.8;
+  color: var(--body-text);
+}
+
+.home-section__cta {
+  text-align: center;
+  margin-top: 48px;
+}
+
+@media (max-width: 760px) {
+  .home-section {
+    padding: 72px 16px;
+  }
+}
+
+/* ═══════════════════════════════
+   AUTENTICACIÓN
+═══════════════════════════════ */
+.auth-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 36px 36px 32px;
+}
+
+.auth-card__footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+@media (max-width: 560px) {
+  .auth-card {
+    padding: 28px 20px;
+  }
+}
+
+/* ═══════════════════════════════
+   PEDIDO EN CURSO (CARRITO)
+═══════════════════════════════ */
+.cart-layout {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .cart-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cart-items {
+  list-style: none;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.cart-item {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--cream-mid);
+}
+
+.cart-item:last-child {
+  border-bottom: none;
+}
+
+.cart-item__thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+}
+
+.cart-item__name {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.cart-item__detail {
+  font-size: 13px;
+  color: var(--choco-mid);
+}
+
+.cart-item__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cart-item__subtotal {
+  font-family: var(--font-title);
+  font-weight: 800;
+}
+
+@media (max-width: 560px) {
+  .cart-item {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .cart-item__thumb {
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+  }
+
+  .cart-item__controls {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.cart-continue {
+  margin-top: 16px;
+  font-size: 14.5px;
+}
+
+.summary {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 26px;
+  position: sticky;
+  top: calc(var(--navbar-height) + 24px);
+}
+
+.summary__title {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 18px;
+}
+
+.summary__line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14.5px;
+  padding: 6px 0;
+}
+
+.summary__line--total {
+  border-top: 1px solid var(--cream-mid);
+  margin-top: 8px;
+  padding-top: 14px;
+  font-family: var(--font-title);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.summary .form {
+  margin-top: 20px;
+}
+
+/* ═══════════════════════════════
+   PÁGINA NO ENCONTRADA
+═══════════════════════════════ */
+.not-found {
+  text-align: center;
+}
+
+.not-found__code {
+  font-family: var(--font-title);
+  font-size: 96px;
+  font-weight: 900;
+  color: var(--gold);
+  line-height: 1;
+  margin-bottom: 12px;
+}

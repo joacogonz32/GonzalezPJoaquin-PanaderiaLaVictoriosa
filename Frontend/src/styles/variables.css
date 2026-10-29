@@ -1,0 +1,33 @@
+/* Paleta e identidad visual definidas en Documentacion/identidad-visual-la-victoriosa.pdf */
+:root {
+  --cream: #F5EDD5;
+  --cream-light: #FBF7EE;
+  --cream-mid: #EDE4C8;
+  --chocolate: #2C1503;
+  --choco-mid: #6B4226;
+  --choco-light: #A0683A;
+  --gold: #C8912A;
+  --gold-dark: #9A6C17;
+  --gold-light: #E8B84B;
+  --gold-pale: #F3D98A;
+  --white: #FFFDF8;
+  --body-text: #4A2A0E;
+
+  /* Colores de estado (mensajes, validaciones, estados de pedido) */
+  --success: #3F7A3A;
+  --success-bg: #E6F0DC;
+  --error: #A3321F;
+  --error-bg: #F8E1DA;
+  --info-bg: #F3E8CC;
+
+  --font-title: 'Raleway', sans-serif;
+  --font-body: 'Open Sans', sans-serif;
+
+  --radius: 3px;
+  --shadow-card: 0 4px 28px rgba(44, 21, 3, 0.07);
+  --shadow-card-hover: 0 16px 48px rgba(44, 21, 3, 0.14);
+  --focus-ring: 0 0 0 3px rgba(200, 145, 42, 0.55);
+
+  --content-width: 1080px;
+  --navbar-height: 72px;
+}
