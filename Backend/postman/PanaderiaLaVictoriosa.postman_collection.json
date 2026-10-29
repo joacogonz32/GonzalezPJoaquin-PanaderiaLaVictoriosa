@@ -2,15 +2,277 @@
   "info": {
     "_postman_id": "b5b9a4f0-1a2b-4c3d-9e8f-panaderia0001",
     "name": "Panadería La Victoriosa - API",
-    "description": "Colección para probar el CRUD de Producto y el manejo centralizado de errores del backend (MVC + Express + persistencia en memoria).",
+    "description": "Colección para probar la API de Panadería La Victoriosa: autenticación, CRUD de Producto (solo administrador), pedidos regulares y encargos especiales, y el manejo centralizado de errores.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
-    { "key": "productoId", "value": "", "type": "string" },
-    { "key": "productoDuplicadoId", "value": "", "type": "string" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "productoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productoDuplicadoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "clienteToken",
+      "value": ""
+    },
+    {
+      "key": "pedidoId",
+      "value": ""
+    }
   ],
   "item": [
+    {
+      "name": "0. Autenticación",
+      "item": [
+        {
+          "name": "Login administrador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@lavictoriosa.com\",\n  \"contrasena\": \"admin1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('devuelve token y rol ADMINISTRADOR', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.usuario.rol).to.eql('ADMINISTRADOR');",
+                  "    pm.expect(json.data.usuario).to.not.have.property('contrasena');",
+                  "    pm.collectionVariables.set('adminToken', json.data.token);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Login cliente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"cliente@demo.com\",\n  \"contrasena\": \"cliente123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('devuelve token y rol CLIENTE', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.usuario.rol).to.eql('CLIENTE');",
+                  "    pm.collectionVariables.set('clienteToken', json.data.token);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Perfil del usuario logueado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/perfil",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "perfil"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('devuelve el email', function () { pm.expect(pm.response.json().data.email).to.eql('cliente@demo.com'); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Credenciales incorrectas (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@lavictoriosa.com\",\n  \"contrasena\": \"incorrecta\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Registro con email duplicado (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Prueba\",\n  \"email\": \"cliente@demo.com\",\n  \"contrasena\": \"123456\",\n  \"telefono\": \"11 5555 0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registro",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registro"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
     {
       "name": "Producto - CRUD",
       "item": [
@@ -21,8 +283,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/productos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
             }
           },
           "event": [
@@ -47,16 +314,34 @@
           "name": "2. Crear producto",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre\": \"Medialuna de manteca\",\n  \"descripcion\": \"Clásica, hojaldrada\",\n  \"precio\": 300,\n  \"stock\": 50,\n  \"categoria\": \"Facturas\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/productos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
             }
           },
           "event": [
@@ -85,8 +370,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/productos/{{productoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos", "{{productoId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "{{productoId}}"
+              ]
             }
           },
           "event": [
@@ -110,16 +401,35 @@
           "name": "4. Actualizar producto (stock)",
           "request": {
             "method": "PUT",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"stock\": 80\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/productos/{{productoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos", "{{productoId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "{{productoId}}"
+              ]
             }
           },
           "event": [
@@ -143,11 +453,22 @@
           "name": "5. Eliminar producto",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/productos/{{productoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos", "{{productoId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "{{productoId}}"
+              ]
             }
           },
           "event": [
@@ -179,8 +500,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/productos/999999",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos", "999999"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "999999"
+              ]
             }
           },
           "event": [
@@ -205,16 +532,34 @@
           "name": "Datos invalidos (400)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre\": \"Producto sin precio ni stock\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/productos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
             }
           },
           "event": [
@@ -224,10 +569,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code es 400', function () { pm.response.to.have.status(400); });",
-                  "pm.test('mensaje de datos invalidos', function () {",
+                  "pm.test('respuesta de error con formato estandar', function () {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
-                  "    pm.expect(json.message).to.eql('Los datos enviados son inválidos.');",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});",
+                  "pm.test('indica que falta el precio', function () {",
+                  "    pm.expect(pm.response.json().message).to.eql('El precio debe ser un número mayor a cero.');",
                   "});"
                 ]
               }
@@ -239,16 +587,34 @@
           "name": "Crear producto para duplicar",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre\": \"Producto Prueba Duplicado\",\n  \"descripcion\": \"Usado solo para probar el caso 409\",\n  \"precio\": 100,\n  \"stock\": 10,\n  \"categoria\": \"Facturas\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/productos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
             }
           },
           "event": [
@@ -272,16 +638,34 @@
           "name": "Recurso duplicado (409)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre\": \"Producto Prueba Duplicado\",\n  \"descripcion\": \"Usado solo para probar el caso 409\",\n  \"precio\": 100,\n  \"stock\": 10,\n  \"categoria\": \"Facturas\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/productos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
             }
           },
           "event": [
@@ -294,7 +678,7 @@
                   "pm.test('mensaje de recurso duplicado', function () {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
-                  "    pm.expect(json.message).to.eql('El recurso ya existe.');",
+                  "    pm.expect(json.message).to.eql('Ya existe un producto con ese nombre.');",
                   "});"
                 ]
               }
@@ -306,11 +690,22 @@
           "name": "Limpiar producto de prueba (duplicado)",
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/productos/{{productoDuplicadoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "productos", "{{productoDuplicadoId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "{{productoDuplicadoId}}"
+              ]
             }
           },
           "event": [
@@ -333,8 +728,13 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/no-existe",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "no-existe"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "no-existe"
+              ]
             }
           },
           "event": [
@@ -348,6 +748,593 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.eql(false);",
                   "    pm.expect(json.message).to.eql('La ruta solicitada no existe.');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "ID no numérico (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos",
+                "abc"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "JSON mal formado (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"nombre\": ",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Permisos por rol",
+      "item": [
+        {
+          "name": "Crear producto sin sesión (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sin permiso\",\n  \"precio\": 100,\n  \"stock\": 1,\n  \"categoria\": \"Panes\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Cliente intenta crear producto (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sin permiso\",\n  \"precio\": 100,\n  \"stock\": 1,\n  \"categoria\": \"Panes\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/productos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "productos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pedidos",
+      "item": [
+        {
+          "name": "1. Crear pedido regular (cliente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"REGULAR\",\n  \"detalles\": [\n    {\n      \"productoId\": 1,\n      \"cantidad\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('queda Pendiente y calcula el total', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.estado).to.eql('Pendiente');",
+                  "    pm.expect(json.data.total).to.eql(json.data.detalles[0].subtotal);",
+                  "    pm.collectionVariables.set('pedidoId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. Mis pedidos (cliente)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos/mios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos",
+                "mios"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('incluye el pedido creado', function () { pm.expect(pm.response.json().data.map(p => p.id)).to.include(pm.collectionVariables.get('pedidoId')); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. Todos los pedidos (administrador)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos?tipo=REGULAR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "REGULAR"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('devuelve una lista', function () { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4. Avanzar estado (administrador)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos/{{pedidoId}}/avanzar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos",
+                "{{pedidoId}}",
+                "avanzar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('pasa a Confirmado', function () { pm.expect(pm.response.json().data.estado).to.eql('Confirmado'); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5. Cancelar pedido (cliente)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos/{{pedidoId}}/cancelar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos",
+                "{{pedidoId}}",
+                "cancelar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('queda Cancelado', function () { pm.expect(pm.response.json().data.estado).to.eql('Cancelado'); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Cancelar un pedido ya cancelado (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos/{{pedidoId}}/cancelar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos",
+                "{{pedidoId}}",
+                "cancelar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Stock insuficiente (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"REGULAR\",\n  \"detalles\": [\n    {\n      \"productoId\": 1,\n      \"cantidad\": 9999\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Encargo con menos de 48 hs (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"ENCARGO\",\n  \"fechaRetiro\": \"2020-01-01T10:00:00.000Z\",\n  \"detalles\": [\n    {\n      \"productoId\": 9,\n      \"cantidad\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Cliente intenta avanzar estado (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clienteToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pedidos/{{pedidoId}}/avanzar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pedidos",
+                "{{pedidoId}}",
+                "avanzar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('respuesta de error con formato estandar', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(false);",
+                  "    pm.expect(json.message).to.be.a('string');",
                   "});"
                 ]
               }
