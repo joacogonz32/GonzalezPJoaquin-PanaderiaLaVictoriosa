@@ -11,6 +11,15 @@ class ProductoController {
         }
     }
 
+    obtenerCategorias(req, res, next) {
+        try {
+            const categorias = productoService.obtenerCategorias();
+            return successResponse(res, categorias);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     obtenerPorId(req, res, next) {
         try {
             const id = Number(req.params.id);
