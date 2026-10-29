@@ -1,10 +1,12 @@
+// Guarda nombre y precio del producto al momento de la compra,
+// para que el historial no cambie si luego se edita o elimina el producto.
 class DetallePedido {
-    constructor(id, pedido, producto, cantidad, subtotal) {
-        this.id = id;
-        this.pedido = pedido;
-        this.producto = producto;
+    constructor(productoId, nombreProducto, precioUnitario, cantidad) {
+        this.productoId = productoId;
+        this.nombreProducto = nombreProducto;
+        this.precioUnitario = precioUnitario;
         this.cantidad = cantidad;
-        this.subtotal = subtotal;
+        this.subtotal = precioUnitario * cantidad;
     }
 }
 
