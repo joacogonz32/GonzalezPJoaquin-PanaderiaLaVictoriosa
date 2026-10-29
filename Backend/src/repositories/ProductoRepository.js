@@ -1,9 +1,20 @@
+import Producto from '../models/Producto.js';
 import { createIdGenerator } from '../utils/idGenerator.js';
+import { productosIniciales } from '../data/productos.js';
 
 const productos = [];
 const generateId = createIdGenerator(1);
 
 class ProductoRepository {
+    constructor() {
+        for (const datos of productosIniciales) {
+            this.create(new Producto(
+                null, datos.nombre, datos.descripcion, datos.precio,
+                datos.stock, datos.categoria, datos.destacado, datos.porEncargo
+            ));
+        }
+    }
+
     findAll() {
         return productos;
     }
