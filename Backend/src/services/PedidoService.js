@@ -1,5 +1,6 @@
 import Pedido from '../models/Pedido.js';
 import DetallePedido from '../models/DetallePedido.js';
+import PagoSenia from '../models/PagoSenia.js';
 import pedidoRepository from '../repositories/PedidoRepository.js';
 import productoRepository from '../repositories/ProductoRepository.js';
 import usuarioRepository from '../repositories/UsuarioRepository.js';
@@ -7,7 +8,7 @@ import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { obtenerEstrategia } from '../strategies/pedidoStrategyFactory.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
-import { EstadosPedido } from '../enums/Pedidos.js';
+import { EstadosPedido, MEDIOS_PAGO_VALIDOS } from '../enums/Pedidos.js';
 import { Roles } from '../enums/Roles.js';
 import { isPositiveInteger } from '../utils/validators.js';
 
@@ -56,36 +57,68 @@ class PedidoService {
             return nuevoPedido;
         });
 
-        return this.#aRespuesta(pedido);
+        return this.#aRespuesta(pedido, Roles.CLIENTE);
     }
 
     async obtenerTodos({ estado, tipo } = {}) {
         const pedidos = await pedidoRepository.findAll({ estado, tipo });
-        return this.#aRespuestas(this.#ordenarPorFecha(pedidos));
+        return this.#aRespuestas(this.#ordenarPorFecha(pedidos), Roles.ADMINISTRADOR);
     }
 
     async obtenerDeCliente(clienteId) {
         const pedidos = await pedidoRepository.findByClienteId(clienteId);
-        return this.#aRespuestas(this.#ordenarPorFecha(pedidos));
+        return this.#aRespuestas(this.#ordenarPorFecha(pedidos), Roles.CLIENTE);
     }
 
     async obtenerPorId(id, usuario) {
-        return this.#aRespuesta(await this.#buscarAccesible(id, usuario));
+        return this.#aRespuesta(await this.#buscarAccesible(id, usuario), usuario.rol);
     }
 
     // Solo el administrador avanza el estado, siguiendo el flujo de la estrategia.
+    // Un encargo Pendiente no avanza a mano: lo confirma el pago de la seña.
     async avanzarEstado(id) {
         const pedido = await ejecutarTransaccion(async (tx) => {
             const pedidoActual = await this.#buscar(id, tx);
-            const siguiente = obtenerEstrategia(pedidoActual.tipo).siguienteEstado(pedidoActual.estado);
+            const estrategia = obtenerEstrategia(pedidoActual.tipo);
+            const siguiente = estrategia.siguienteEstado(pedidoActual.estado);
             if (!siguiente) {
                 throw new ConflictError(Messages.ORDER_FINAL_STATE);
+            }
+            if (!estrategia.puedeAvanzarManualmente(pedidoActual.estado)) {
+                throw new ConflictError(Messages.ORDER_DEPOSIT_REQUIRED);
             }
             await pedidoRepository.update(id, { estado: siguiente }, tx);
             pedidoActual.estado = siguiente;
             return pedidoActual;
         });
-        return this.#aRespuesta(pedido);
+        return this.#aRespuesta(pedido, Roles.ADMINISTRADOR);
+    }
+
+    // Pago simulado de la seña de un encargo: registra el medio y la fecha
+    // y pasa el encargo al siguiente estado ("Seña confirmada").
+    // El saldo restante se abona en el local al retirar.
+    async pagarSenia(id, usuario, datos = {}) {
+        const { medio } = datos;
+        if (!MEDIOS_PAGO_VALIDOS.includes(medio)) {
+            throw new BadRequestError(Messages.ORDER_INVALID_PAYMENT_METHOD(MEDIOS_PAGO_VALIDOS));
+        }
+
+        const pedido = await ejecutarTransaccion(async (tx) => {
+            const pedidoActual = await this.#buscarAccesible(id, usuario, tx);
+            const estrategia = obtenerEstrategia(pedidoActual.tipo);
+            if (!estrategia.puedePagarSenia(pedidoActual.estado)) {
+                throw new ConflictError(Messages.ORDER_DEPOSIT_NOT_PENDING);
+            }
+
+            const pago = new PagoSenia(medio, new Date().toISOString());
+            const nuevoEstado = estrategia.siguienteEstado(pedidoActual.estado);
+            await pedidoRepository.update(id, { estado: nuevoEstado, pagoSenia: pago }, tx);
+
+            pedidoActual.estado = nuevoEstado;
+            pedidoActual.pagoSenia = pago;
+            return pedidoActual;
+        });
+        return this.#aRespuesta(pedido, usuario.rol);
     }
 
     // El cliente cancela su pedido; el administrador también puede rechazarlo.
@@ -95,8 +128,12 @@ class PedidoService {
             const pedidoActual = await this.#buscarAccesible(id, usuario, tx);
             const estrategia = obtenerEstrategia(pedidoActual.tipo);
 
-            if (!estrategia.puedeCancelarse(pedidoActual.estado)) {
-                throw new ConflictError(Messages.ORDER_CANNOT_CANCEL);
+            if (!estrategia.puedeCancelarse(pedidoActual.estado, usuario.rol)) {
+                // Si el administrador sí podría cancelarlo, el motivo es que la seña ya está paga.
+                const soloAdministrador = estrategia.puedeCancelarse(pedidoActual.estado, Roles.ADMINISTRADOR);
+                throw new ConflictError(soloAdministrador
+                    ? Messages.ORDER_CANNOT_CANCEL_DEPOSIT_PAID
+                    : Messages.ORDER_CANNOT_CANCEL);
             }
 
             const productos = estrategia.afectaStock()
@@ -116,7 +153,7 @@ class PedidoService {
             pedidoActual.estado = EstadosPedido.CANCELADO;
             return pedidoActual;
         });
-        return this.#aRespuesta(pedido);
+        return this.#aRespuesta(pedido, usuario.rol);
     }
 
     async #buscar(id, tx) {
@@ -183,15 +220,15 @@ class PedidoService {
         return [...pedidos].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
     }
 
-    async #aRespuesta(pedido) {
-        const [respuesta] = await this.#aRespuestas([pedido]);
+    async #aRespuesta(pedido, rol) {
+        const [respuesta] = await this.#aRespuestas([pedido], rol);
         return respuesta;
     }
 
-    // Agrega a cada pedido los datos del cliente y la información del flujo de estados,
-    // para que el frontend no tenga que duplicar las reglas de la Strategy.
+    // Agrega a cada pedido los datos del cliente y lo que puede hacer el usuario que lo consulta
+    // (según su rol), para que el frontend no tenga que duplicar las reglas de la Strategy.
     // Los clientes se leen todos juntos en una sola consulta.
-    async #aRespuestas(pedidos) {
+    async #aRespuestas(pedidos, rol) {
         const clientes = await usuarioRepository.findByIds(pedidos.map((pedido) => pedido.clienteId));
 
         return pedidos.map((pedido) => {
@@ -206,7 +243,11 @@ class PedidoService {
                     : null,
                 flujo: estrategia.flujo,
                 siguienteEstado: cancelado ? null : estrategia.siguienteEstado(pedido.estado),
-                cancelable: estrategia.puedeCancelarse(pedido.estado)
+                avanzable: rol === Roles.ADMINISTRADOR && estrategia.puedeAvanzarManualmente(pedido.estado),
+                cancelable: estrategia.puedeCancelarse(pedido.estado, rol),
+                puedePagarSenia: rol === Roles.CLIENTE && estrategia.puedePagarSenia(pedido.estado),
+                // Lo que falta abonar en el local al retirar.
+                saldo: pedido.total - (pedido.pagoSenia ? pedido.montoSenia : 0)
             };
         });
     }

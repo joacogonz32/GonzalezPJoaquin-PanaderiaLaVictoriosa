@@ -19,6 +19,13 @@ export const ESTADOS_PEDIDO = Object.freeze([
   'Cancelado',
 ])
 
+// Medios de pago de la seña (valor = enum MediosPago del backend).
+export const MEDIOS_PAGO = Object.freeze([
+  { valor: 'Transferencia', descripcion: 'Transferencia bancaria a la cuenta de la panadería.' },
+  { valor: 'Mercado Pago', descripcion: 'Con saldo o código QR de Mercado Pago.' },
+  { valor: 'Tarjeta', descripcion: 'Tarjeta de débito o crédito.' },
+])
+
 export const ROLES = Object.freeze({
   CLIENTE: 'CLIENTE',
   ADMINISTRADOR: 'ADMINISTRADOR',

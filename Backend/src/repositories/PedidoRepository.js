@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../config/firebase.js';
 import Pedido from '../models/Pedido.js';
 import DetallePedido from '../models/DetallePedido.js';
+import PagoSenia from '../models/PagoSenia.js';
 import contadorRepository from './ContadorRepository.js';
 import { ejecutarTransaccion, escribir, leer } from './transacciones.js';
 import { Colecciones } from '../enums/Colecciones.js';
@@ -9,6 +10,9 @@ import { Colecciones } from '../enums/Colecciones.js';
 // En Firestore las fechas se guardan como Timestamp; en el resto del sistema, como texto ISO 8601.
 const aTimestamp = (fechaIso) => (fechaIso ? Timestamp.fromDate(new Date(fechaIso)) : null);
 const aFechaIso = (timestamp) => (timestamp ? timestamp.toDate().toISOString() : null);
+
+// Firestore solo guarda objetos planos: el PagoSenia se convierte en { medio, fecha }.
+const aDocumentoPago = (pago) => (pago ? { medio: pago.medio, fecha: aTimestamp(pago.fecha) } : null);
 
 // Convierte entre la clase Pedido (con sus DetallePedido) y el documento pedidos/{id}.
 // Los detalles se guardan dentro del mismo documento porque siempre se leen junto con el pedido.
@@ -29,7 +33,8 @@ const convertidor = {
                 subtotal: detalle.subtotal
             })),
             fechaRetiro: aTimestamp(pedido.fechaRetiro),
-            montoSenia: pedido.montoSenia
+            montoSenia: pedido.montoSenia,
+            pagoSenia: aDocumentoPago(pedido.pagoSenia)
         };
     },
     fromFirestore(documento) {
@@ -39,7 +44,8 @@ const convertidor = {
         ));
         return new Pedido(
             datos.id, datos.clienteId, aFechaIso(datos.fecha), datos.tipo, datos.estado,
-            datos.total, detalles, aFechaIso(datos.fechaRetiro), datos.montoSenia
+            datos.total, detalles, aFechaIso(datos.fechaRetiro), datos.montoSenia,
+            datos.pagoSenia ? new PagoSenia(datos.pagoSenia.medio, aFechaIso(datos.pagoSenia.fecha)) : null
         );
     }
 };
@@ -75,8 +81,13 @@ class PedidoRepository {
         return pedido;
     }
 
+    // update() no pasa por el converter, así que los campos con objetos se convierten acá.
     async update(id, datosActualizados, tx) {
-        await escribir(tx, 'update', referencia(id), datosActualizados);
+        const datos = { ...datosActualizados };
+        if (datos.pagoSenia !== undefined) {
+            datos.pagoSenia = aDocumentoPago(datos.pagoSenia);
+        }
+        await escribir(tx, 'update', referencia(id), datos);
     }
 }
 

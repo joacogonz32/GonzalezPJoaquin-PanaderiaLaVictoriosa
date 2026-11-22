@@ -50,6 +50,16 @@ class PedidoController {
         }
     }
 
+    async pagarSenia(req, res, next) {
+        try {
+            const id = Number(req.params.id);
+            const pedido = await pedidoService.pagarSenia(id, req.usuario, req.body);
+            return successResponse(res, pedido);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async cancelar(req, res, next) {
         try {
             const id = Number(req.params.id);

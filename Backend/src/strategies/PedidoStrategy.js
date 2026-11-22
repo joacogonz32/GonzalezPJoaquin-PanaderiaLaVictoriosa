@@ -1,5 +1,5 @@
 // Clase base del patrón Strategy: cada tipo de pedido define su flujo de estados
-// y sus propias reglas de validación, stock y seña.
+// y sus propias reglas de validación, stock, seña y cancelación.
 class PedidoStrategy {
     constructor(flujo, estadosCancelables) {
         this.flujo = flujo;
@@ -33,8 +33,19 @@ class PedidoStrategy {
         return this.flujo[index + 1];
     }
 
-    puedeCancelarse(estadoActual) {
+    // Indica si el administrador puede pasar el pedido al siguiente estado.
+    puedeAvanzarManualmente(estadoActual) {
+        return this.siguienteEstado(estadoActual) !== null;
+    }
+
+    // Indica si el usuario con el rol indicado puede cancelar el pedido en este estado.
+    puedeCancelarse(estadoActual, _rol) {
         return this.estadosCancelables.includes(estadoActual);
+    }
+
+    // Indica si el pedido tiene una seña pendiente de pago.
+    puedePagarSenia(_estadoActual) {
+        return false;
     }
 }
 

@@ -13,6 +13,15 @@ export const EstadosPedido = Object.freeze({
     CANCELADO: "Cancelado"
 });
 
+// Medios con los que el cliente puede abonar (simuladamente) la seña de un encargo.
+export const MediosPago = Object.freeze({
+    TRANSFERENCIA: "Transferencia",
+    MERCADO_PAGO: "Mercado Pago",
+    TARJETA: "Tarjeta"
+});
+
+export const MEDIOS_PAGO_VALIDOS = Object.freeze(Object.values(MediosPago));
+
 // Reglas de negocio parametrizables
 export const ReglasPedido = Object.freeze({
     HORAS_ANTICIPACION_ENCARGO: 48,

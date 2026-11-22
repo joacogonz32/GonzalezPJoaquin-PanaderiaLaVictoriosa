@@ -42,7 +42,11 @@ export const Messages = Object.freeze({
     ORDER_INVALID_PICKUP_DATE: "La fecha de retiro no es válida.",
     ORDER_PICKUP_TOO_SOON: (horas) => `Los encargos deben solicitarse con al menos ${horas} horas de anticipación.`,
     ORDER_CANNOT_CANCEL: "El pedido ya no puede cancelarse porque está en preparación o en un estado posterior.",
-    ORDER_FINAL_STATE: "El pedido ya se encuentra en un estado final y no puede avanzar."
+    ORDER_FINAL_STATE: "El pedido ya se encuentra en un estado final y no puede avanzar.",
+    ORDER_CANNOT_CANCEL_DEPOSIT_PAID: "La seña ya fue pagada, por eso el encargo no puede cancelarse desde la web. Comunicate con la panadería.",
+    ORDER_DEPOSIT_REQUIRED: "El encargo no puede avanzar hasta que el cliente pague la seña.",
+    ORDER_DEPOSIT_NOT_PENDING: "Este pedido no tiene una seña pendiente de pago.",
+    ORDER_INVALID_PAYMENT_METHOD: (medios) => `El medio de pago no es válido. Opciones: ${medios.join(', ')}.`
 });
 
 export default Messages;

@@ -20,6 +20,11 @@ export function avanzarEstadoPedido(id) {
   return request(`/pedidos/${id}/avanzar`, { method: 'PATCH' })
 }
 
+// Pago simulado de la seña de un encargo. `medio`: 'Transferencia', 'Mercado Pago' o 'Tarjeta'.
+export function pagarSenia(id, medio) {
+  return request(`/pedidos/${id}/pagar-senia`, { method: 'PATCH', body: { medio } })
+}
+
 export function cancelarPedido(id) {
   return request(`/pedidos/${id}/cancelar`, { method: 'PATCH' })
 }

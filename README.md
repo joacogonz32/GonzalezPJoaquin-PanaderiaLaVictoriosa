@@ -60,7 +60,7 @@ Al iniciar, el backend comprueba la conexión. Si falta la configuración o la b
 |-----------|-----------|--------|
 | `productos` | `productos/{id}` | `id`, `nombre`, `nombreNormalizado`, `descripcion`, `precio`, `stock`, `categoria`, `destacado`, `porEncargo` |
 | `usuarios` | `usuarios/{id}` | `id`, `nombre`, `email` (en minúsculas), `contrasena` (hash `salt:hash` con scrypt), `telefono`, `rol` |
-| `pedidos` | `pedidos/{id}` | `id`, `clienteId`, `fecha`, `tipo`, `estado`, `total`, `detalles` (lista de `{ productoId, nombreProducto, precioUnitario, cantidad, subtotal }`), `fechaRetiro`, `montoSenia` |
+| `pedidos` | `pedidos/{id}` | `id`, `clienteId`, `fecha`, `tipo`, `estado`, `total`, `detalles` (lista de `{ productoId, nombreProducto, precioUnitario, cantidad, subtotal }`), `fechaRetiro`, `montoSenia`, `pagoSenia` (`{ medio, fecha }` o `null`) |
 | `sesiones` | `sesiones/{token}` | `usuarioId`, `creadaEn` |
 | `contadores` | `contadores/{coleccion}` | `ultimoId` |
 
@@ -141,10 +141,14 @@ Entidades identificadas en el análisis del sistema ([Documentacion/analisis-sis
 | | `PedidoRegularStrategy` | `PedidoEncargoStrategy` |
 |---|---|---|
 | Flujo | Pendiente → Confirmado → En preparación → Listo para retirar → Finalizado | Pendiente → Seña confirmada → En preparación → Listo para retirar → Finalizado |
-| Cancelable desde | Pendiente, Confirmado | Pendiente, Seña confirmada |
+| Paso de Pendiente al segundo estado | Lo hace el administrador | Lo hace el **pago de la seña** del cliente; el administrador no puede saltearlo |
+| Cancelable por el cliente | Pendiente, Confirmado | Solo Pendiente (con la seña paga ya no puede cancelar) |
+| Cancelable por el administrador | Pendiente, Confirmado | Pendiente, Seña confirmada (si la seña estaba paga, queda a reintegrar) |
 | Validación | No admite productos por encargo; cantidad ≤ stock | Fecha de retiro obligatoria, al menos 48 hs después |
 | Stock | Se descuenta al crear y se repone al cancelar | No se descuenta (se elabora para la fecha) |
-| Seña | — | 50% del total |
+| Pago | Todo en el local al retirar | 50% de seña por la web (simulada) y el saldo en el local al retirar |
+
+**Pago de la seña (simulado):** el cliente elige un medio (Transferencia, Mercado Pago o Tarjeta) y confirma; no se piden datos de tarjeta ni se cobra nada real. El pedido guarda el medio y la fecha del pago (`pagoSenia`). Al pasar el pedido a "Finalizado", el administrador registra la entrega y el cobro del saldo en el local.
 
 ## API
 
@@ -200,6 +204,7 @@ Las rutas protegidas reciben el token devuelto por el login en el header `Author
 | GET    | `/`               | Administrador            | Todos los pedidos (filtros opcionales `?estado=` y `?tipo=`) |
 | GET    | `/:id`            | Dueño o administrador    | Un pedido |
 | PATCH  | `/:id/avanzar`    | Administrador            | Pasa el pedido al siguiente estado de su flujo |
+| PATCH  | `/:id/pagar-senia` | Cliente (dueño)         | Pago simulado de la seña de un encargo (`{ "medio": "Mercado Pago" }`). Lo pasa a "Seña confirmada" |
 | PATCH  | `/:id/cancelar`   | Dueño o administrador    | Cancela (o rechaza) el pedido si su estado lo permite |
 
 ```json
@@ -210,7 +215,7 @@ Las rutas protegidas reciben el token devuelto por el login en el header `Author
 }
 ```
 
-Cada pedido devuelto incluye además `cliente`, `flujo` (estados de su tipo), `siguienteEstado` y `cancelable`, para que el frontend no repita las reglas de la Strategy.
+Cada pedido devuelto incluye además `cliente`, `flujo` (estados de su tipo), `siguienteEstado`, `avanzable`, `cancelable`, `puedePagarSenia` (calculados según el rol de quien consulta) y `saldo` (lo que falta abonar en el local), para que el frontend no repita las reglas de la Strategy.
 
 ### Reglas de negocio validadas en el backend
 
@@ -221,6 +226,7 @@ Cada pedido devuelto incluye además `cliente`, `flujo` (estados de su tipo), `s
 - Un Pedido Regular no puede superar el stock disponible ni incluir productos por encargo.
 - Un Encargo Especial requiere fecha de retiro con al menos 48 hs de anticipación.
 - Un pedido no se puede cancelar desde "En preparación" en adelante, ni avanzar desde un estado final.
+- Un Encargo Especial no avanza hasta que el cliente paga la seña; la seña solo se paga una vez, con un medio válido y por el dueño del encargo. Con la seña paga, solo el administrador puede cancelarlo.
 - Cada cliente solo ve y cancela sus propios pedidos.
 
 ### Probar con Postman

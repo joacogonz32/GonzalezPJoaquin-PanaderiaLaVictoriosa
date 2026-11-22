@@ -9,6 +9,12 @@ export default function OrderCard({ pedido, mostrarCliente = false, children }) 
   const tituloId = useId()
   const cancelado = pedido.estado === 'Cancelado'
   const indiceActual = pedido.flujo.indexOf(pedido.estado)
+  const conSenia = pedido.montoSenia !== null
+  const { pagoSenia } = pedido
+
+  const estadoSenia = pagoSenia
+    ? `Pagada con ${pagoSenia.medio} el ${formatearFechaHora(pagoSenia.fecha)}${cancelado ? ' · a reintegrar' : ''}`
+    : cancelado ? 'No se pagó' : 'Pendiente de pago'
 
   return (
     <article className="order-card" aria-labelledby={tituloId}>
@@ -54,6 +60,12 @@ export default function OrderCard({ pedido, mostrarCliente = false, children }) 
           <dt>Lugar de retiro</dt>
           <dd>Cullen 5224, Villa Urquiza</dd>
         </div>
+        {conSenia && (
+          <div>
+            <dt>Seña</dt>
+            <dd>{estadoSenia}</dd>
+          </div>
+        )}
       </dl>
 
       <ul className="order-card__items" aria-label="Productos del pedido">
@@ -66,8 +78,13 @@ export default function OrderCard({ pedido, mostrarCliente = false, children }) 
       </ul>
 
       <div className="order-card__totals">
-        {pedido.montoSenia !== null && (
+        {conSenia && (
           <span>Seña (50%): <strong>{formatearPrecio(pedido.montoSenia)}</strong></span>
+        )}
+        {pagoSenia && !cancelado && (
+          pedido.estado === 'Finalizado'
+            ? <span>Saldo abonado en el local: <strong>{formatearPrecio(pedido.saldo)}</strong></span>
+            : <span>Saldo a pagar al retirar: <strong>{formatearPrecio(pedido.saldo)}</strong></span>
         )}
         <span>Total: <strong>{formatearPrecio(pedido.total)}</strong></span>
       </div>

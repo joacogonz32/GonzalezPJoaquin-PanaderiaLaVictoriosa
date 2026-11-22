@@ -11,7 +11,11 @@ import { useAsync } from '../../hooks/useAsync'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import { useToast } from '../../context/contexts'
 import { avanzarEstadoPedido, cancelarPedido, getPedidos } from '../../services/pedidosService'
+import { formatearPrecio } from '../../utils/formatters'
 import { ESTADOS_PEDIDO, NOMBRES_TIPO_PEDIDO, TIPOS_PEDIDO } from '../../utils/constantes'
+
+// Al pasar a este estado el cliente retira el pedido y abona el saldo en el local.
+const ESTADO_FINALIZADO = 'Finalizado'
 
 export default function AdminPedidosPage() {
   usePageTitle('Gestionar pedidos')
@@ -32,7 +36,12 @@ export default function AdminPedidosPage() {
     setPedidoEnProceso(pedido.id)
     try {
       const actualizado = await avanzarEstadoPedido(pedido.id)
-      mostrarExito(`El pedido #${actualizado.id} pasó a «${actualizado.estado}».`, 'Estado actualizado')
+      mostrarExito(
+        actualizado.estado === ESTADO_FINALIZADO
+          ? `El pedido #${actualizado.id} fue entregado y se cobró el saldo de ${formatearPrecio(pedido.saldo)}.`
+          : `El pedido #${actualizado.id} pasó a «${actualizado.estado}».`,
+        'Estado actualizado'
+      )
       recargar()
     } catch (error) {
       mostrarError(error.message)
@@ -111,14 +120,19 @@ export default function AdminPedidosPage() {
                         {pedido.tipo === TIPOS_PEDIDO.ENCARGO ? 'Rechazar encargo' : 'Cancelar pedido'}
                       </Button>
                     )}
-                    {pedido.siguienteEstado && (
+                    {pedido.siguienteEstado && !pedido.avanzable && (
+                      <span className="field__hint">Esperando que el cliente pague la seña.</span>
+                    )}
+                    {pedido.avanzable && (
                       <Button
                         size="small"
                         onClick={() => avanzar(pedido)}
                         cargando={pedidoEnProceso === pedido.id}
                         disabled={pedidoEnProceso !== null}
                       >
-                        Pasar a «{pedido.siguienteEstado}»
+                        {pedido.siguienteEstado === ESTADO_FINALIZADO
+                          ? `Entregar y cobrar ${formatearPrecio(pedido.saldo)}`
+                          : `Pasar a «${pedido.siguienteEstado}»`}
                       </Button>
                     )}
                   </OrderCard>
@@ -133,7 +147,9 @@ export default function AdminPedidosPage() {
         abierto={Boolean(pedidoARechazar)}
         titulo={pedidoARechazar?.tipo === TIPOS_PEDIDO.ENCARGO ? '¿Rechazar el encargo?' : '¿Cancelar el pedido?'}
         mensaje={pedidoARechazar
-          ? `El ${NOMBRES_TIPO_PEDIDO[pedidoARechazar.tipo].toLowerCase()} #${pedidoARechazar.id} de ${pedidoARechazar.cliente?.nombre ?? 'el cliente'} quedará cancelado. Esta acción no se puede deshacer.`
+          ? `El ${NOMBRES_TIPO_PEDIDO[pedidoARechazar.tipo].toLowerCase()} #${pedidoARechazar.id} de ${pedidoARechazar.cliente?.nombre ?? 'el cliente'} quedará cancelado.` +
+            (pedidoARechazar.pagoSenia ? ` La seña de ${formatearPrecio(pedidoARechazar.montoSenia)} ya fue pagada y habrá que reintegrarla.` : '') +
+            ' Esta acción no se puede deshacer.'
           : ''}
         textoConfirmar="Sí, cancelar"
         cargando={rechazando}

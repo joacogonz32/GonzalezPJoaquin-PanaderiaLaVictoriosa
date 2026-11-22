@@ -14,6 +14,7 @@ router.get('/mios', autorizar(Roles.CLIENTE), pedidoController.obtenerMisPedidos
 router.get('/:id', validarId, pedidoController.obtenerPorId);
 router.post('/', autorizar(Roles.CLIENTE), pedidoController.crear);
 router.patch('/:id/avanzar', autorizar(Roles.ADMINISTRADOR), validarId, pedidoController.avanzarEstado);
+router.patch('/:id/pagar-senia', autorizar(Roles.CLIENTE), validarId, pedidoController.pagarSenia);
 router.patch('/:id/cancelar', validarId, pedidoController.cancelar);
 
 export default router;

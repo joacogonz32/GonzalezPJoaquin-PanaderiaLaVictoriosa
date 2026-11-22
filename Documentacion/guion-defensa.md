@@ -29,7 +29,7 @@ Seguir el camino de la request `POST /api/pedidos`:
 | Middleware | `Backend/src/middlewares/auth.js` | Lee el token `Bearer` y deja el usuario en `req.usuario` |
 | Controller | `Backend/src/controllers/PedidoController.js` | Solo recibe la request, llama al service y responde con `successResponse` |
 | Service | `Backend/src/services/PedidoService.js` → `crear()` | Elige la estrategia por `tipo` y, dentro de una **transacción**, lee los productos, valida, calcula el total y guarda el pedido (en un pedido regular también descuenta el stock) |
-| Strategy | `Backend/src/strategies/PedidoEncargoStrategy.js` | Regla de 48 hs, seña del 50% y flujo con "Seña confirmada". Comparar con `PedidoRegularStrategy.js` (stock) |
+| Strategy | `Backend/src/strategies/PedidoEncargoStrategy.js` | Regla de 48 hs, seña del 50% y flujo con "Seña confirmada". `puedePagarSenia`, `puedeAvanzarManualmente` y `puedeCancelarse(estado, rol)` definen que solo el pago confirma la seña y que con la seña paga el cliente ya no cancela. Comparar con `PedidoRegularStrategy.js` (stock) |
 | Repository | `Backend/src/repositories/PedidoRepository.js` | Guarda el pedido en la colección `pedidos` de Firestore. El *converter* traduce entre la clase `Pedido` y el documento, y `ContadorRepository` le asigna el número de pedido |
 | Errores | `Backend/src/exceptions/AppError.js`, `enums/Messages.js`, `middlewares/errorHandler.js` | El service lanza `BadRequestError(Messages.ORDER_PICKUP_TOO_SOON(48))` y el middleware arma `{ success: false, message }` |
 
@@ -40,7 +40,8 @@ Mencionar también `PATCH /api/pedidos/:id/avanzar`: el service le pide a la est
 | Archivo | Qué explicar |
 |---------|--------------|
 | `Frontend/src/services/api.js` | Cliente HTTP único: agrega el token, interpreta `{ success, data, message }` y lanza `ApiError` |
-| `Frontend/src/services/pedidosService.js` | `crearPedido`, `getMisPedidos`, `avanzarEstadoPedido`, `cancelarPedido` |
+| `Frontend/src/services/pedidosService.js` | `crearPedido`, `getMisPedidos`, `pagarSenia`, `avanzarEstadoPedido`, `cancelarPedido` |
+| `Frontend/src/components/PagoSeniaDialog.jsx` | Modal que simula el pago de la seña: muestra seña, saldo y total, y envía el medio elegido |
 | `Frontend/src/context/CartProvider.jsx` | El pedido en preparación vive en el navegador hasta que se confirma |
 | `Frontend/src/pages/CarritoPage.jsx` | Si hay productos por encargo se fuerza el tipo Encargo; valida la fecha antes de enviar; muestra la notificación de éxito o el error del backend |
 | `Frontend/src/components/OrderCard.jsx` | Componente reutilizado por "Mis pedidos" y por la administración; muestra el progreso con el `flujo` que manda el backend |
@@ -53,10 +54,10 @@ Mencionar también `PATCH /api/pedidos/:id/avanzar`: el service le pide a la est
 3. **Tu pedido**: el tipo queda en "Encargo especial" automáticamente. Mostrar la seña del 50%.
 4. Hacer click en **Ingresar para confirmar** → iniciar sesión con tu cuenta de cliente (o entrar en **Registrate** y crearla en ese momento) → vuelve al pedido con lo elegido.
 5. Elegir una fecha de retiro para **mañana** → confirmar → aparece el error de las 48 hs.
-6. Elegir una fecha dentro de **3 días** → confirmar → notificación "¡Pedido confirmado!" y redirección a **Mis pedidos** con el encargo en "Pendiente".
-7. **Salir** → ingresar con la cuenta de administrador (la definida en `Backend/.env`) → **Gestionar pedidos**.
-8. Hacer click en **Pasar a «Seña confirmada»** y luego en **Pasar a «En preparación»**. Mostrar que desaparece el botón "Rechazar encargo".
-9. **Salir** → volver a ingresar como cliente → **Mis pedidos**: el encargo está "En preparación" y ya no tiene botón de cancelar (regla de negocio).
+6. Elegir una fecha dentro de **3 días** → confirmar → notificación "¡Encargo registrado!" y redirección a **Mis pedidos**, que abre el modal **Pagar la seña** con la seña, el saldo a pagar en el local y el total.
+7. Elegir un medio de pago (por ejemplo **Mercado Pago**) → **Pagar** → notificación "Encargo confirmado": el encargo pasa solo a "Seña confirmada", muestra "Pagada con Mercado Pago" y el saldo a pagar al retirar. Mostrar que ya no aparece el botón de cancelar (con la seña paga, el cliente no puede cancelar).
+8. **Salir** → ingresar con la cuenta de administrador (la definida en `Backend/.env`) → **Gestionar pedidos**. Hacer click en **Pasar a «En preparación»** y **Pasar a «Listo para retirar»**; el último botón dice **Entregar y cobrar $…** (el saldo que se paga en el local).
+9. (Opcional) Mostrar con un encargo sin pagar que el administrador ve "Esperando que el cliente pague la seña" y no puede avanzarlo.
 10. **Consola de Firebase** → Firestore → colección `pedidos`: abrir el documento del encargo y mostrar que el estado, la seña y la fecha de retiro quedaron guardados en la base.
 
 Opcional, si sobra tiempo: en **Gestionar productos**, intentar eliminar un producto y mostrar el diálogo de confirmación.

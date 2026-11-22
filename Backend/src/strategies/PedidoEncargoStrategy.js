@@ -2,6 +2,7 @@ import PedidoStrategy from './PedidoStrategy.js';
 import { EstadosPedido, ReglasPedido } from '../enums/Pedidos.js';
 import { BadRequestError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
+import { Roles } from '../enums/Roles.js';
 
 const MILISEGUNDOS_POR_HORA = 60 * 60 * 1000;
 
@@ -35,6 +36,24 @@ class PedidoEncargoStrategy extends PedidoStrategy {
 
     calcularSenia(total) {
         return Math.round(total * ReglasPedido.PORCENTAJE_SENIA);
+    }
+
+    // La seña se paga mientras el encargo está Pendiente; al pagarla pasa a "Seña confirmada".
+    puedePagarSenia(estadoActual) {
+        return estadoActual === EstadosPedido.PENDIENTE;
+    }
+
+    // El administrador no puede confirmar la seña a mano: solo el pago del cliente la confirma.
+    puedeAvanzarManualmente(estadoActual) {
+        return estadoActual !== EstadosPedido.PENDIENTE && super.puedeAvanzarManualmente(estadoActual);
+    }
+
+    // Con la seña paga, el cliente ya no puede cancelar; el administrador todavía puede rechazar el encargo.
+    puedeCancelarse(estadoActual, rol) {
+        if (rol === Roles.CLIENTE) {
+            return estadoActual === EstadosPedido.PENDIENTE;
+        }
+        return super.puedeCancelarse(estadoActual, rol);
     }
 }
 

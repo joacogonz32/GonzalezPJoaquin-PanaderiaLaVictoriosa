@@ -66,11 +66,12 @@ export default function CarritoPage() {
       vaciar()
       mostrarExito(
         esEncargo
-          ? `Recibimos tu encargo #${pedido.id}. Te contactaremos para coordinar la seña de ${formatearPrecio(pedido.montoSenia)}.`
+          ? `Recibimos tu encargo #${pedido.id}. Pagá la seña de ${formatearPrecio(pedido.montoSenia)} para confirmarlo.`
           : `Recibimos tu pedido #${pedido.id}. Podés seguir su estado desde "Mis pedidos".`,
-        '¡Pedido confirmado!'
+        esEncargo ? '¡Encargo registrado!' : '¡Pedido confirmado!'
       )
-      navigate('/mis-pedidos')
+      // En un encargo, "Mis pedidos" abre directamente el pago de la seña.
+      navigate('/mis-pedidos', esEncargo ? { state: { pagarSeniaId: pedido.id } } : undefined)
     } catch (error) {
       mostrarError(error.message)
       // Si el error fue por stock, se actualizan los datos para mostrar lo disponible.
