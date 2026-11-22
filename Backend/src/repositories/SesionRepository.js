@@ -1,17 +1,23 @@
-// Sesiones activas en memoria: token -> id del usuario.
-const sesiones = new Map();
+import { FieldValue } from 'firebase-admin/firestore';
+import { db } from '../config/firebase.js';
+import { Colecciones } from '../enums/Colecciones.js';
+
+// Sesiones activas: sesiones/{token} = { usuarioId, creadaEn }.
+// Al guardarse en la base, las sesiones siguen siendo válidas aunque se reinicie el servidor.
+const referencia = (token) => db.collection(Colecciones.SESIONES).doc(token);
 
 class SesionRepository {
-    create(token, usuarioId) {
-        sesiones.set(token, usuarioId);
+    async create(token, usuarioId) {
+        await referencia(token).set({ usuarioId, creadaEn: FieldValue.serverTimestamp() });
     }
 
-    findUsuarioId(token) {
-        return sesiones.get(token);
+    async findUsuarioId(token) {
+        const documento = await referencia(token).get();
+        return documento.exists ? documento.data().usuarioId : null;
     }
 
-    delete(token) {
-        sesiones.delete(token);
+    async delete(token) {
+        await referencia(token).delete();
     }
 }
 

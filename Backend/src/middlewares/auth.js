@@ -3,14 +3,18 @@ import { UnauthorizedError, ForbiddenError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
 
 // Lee el token "Authorization: Bearer <token>" y deja el usuario en req.usuario.
-export function autenticar(req, res, next) {
+export async function autenticar(req, res, next) {
     const [esquema, token] = (req.headers.authorization ?? '').split(' ');
     if (esquema !== 'Bearer' || !token) {
         return next(new UnauthorizedError(Messages.AUTH_REQUIRED));
     }
 
-    req.usuario = authService.obtenerUsuarioPorToken(token);
-    req.token = token;
+    try {
+        req.usuario = await authService.obtenerUsuarioPorToken(token);
+        req.token = token;
+    } catch (error) {
+        return next(error);
+    }
     next();
 }
 

@@ -6,6 +6,7 @@ export const Messages = Object.freeze({
     DUPLICATED_RESOURCE: "El recurso ya existe.",
     ROUTE_NOT_FOUND: "La ruta solicitada no existe.",
     INTERNAL_SERVER_ERROR: "Ocurrió un error inesperado en el servidor.",
+    DATABASE_UNAVAILABLE: "No se pudo conectar con la base de datos. Intentá nuevamente en unos minutos.",
 
     // Productos
     PRODUCT_NOT_FOUND: "El producto no existe.",

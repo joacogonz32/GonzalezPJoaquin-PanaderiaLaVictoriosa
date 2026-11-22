@@ -1,5 +1,6 @@
 import Producto from '../models/Producto.js';
 import productoRepository from '../repositories/ProductoRepository.js';
+import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { BadRequestError, NotFoundError, ConflictError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
 import { CATEGORIAS_VALIDAS } from '../enums/Categorias.js';
@@ -8,7 +9,7 @@ import { isNonEmptyString, isPositiveNumber, isNonNegativeInteger } from '../uti
 const CAMPOS_ACTUALIZABLES = ['nombre', 'descripcion', 'precio', 'stock', 'categoria', 'destacado', 'porEncargo'];
 
 class ProductoService {
-    obtenerTodos() {
+    async obtenerTodos() {
         return productoRepository.findAll();
     }
 
@@ -16,29 +17,30 @@ class ProductoService {
         return CATEGORIAS_VALIDAS;
     }
 
-    obtenerPorId(id) {
-        const producto = productoRepository.findById(id);
+    async obtenerPorId(id, tx) {
+        const producto = await productoRepository.findById(id, tx);
         if (!producto) {
             throw new NotFoundError(Messages.PRODUCT_NOT_FOUND);
         }
         return producto;
     }
 
-    crear(datos = {}) {
+    async crear(datos = {}) {
         const { nombre, descripcion = '', precio, stock, categoria, destacado = false, porEncargo = false } = datos;
 
         this.#validarCampos({ nombre, descripcion, precio, stock, categoria, destacado, porEncargo });
-        this.#validarNombreDisponible(nombre);
 
-        const nuevoProducto = new Producto(
-            null, nombre.trim(), descripcion.trim(), precio, stock, categoria, destacado, porEncargo
-        );
-        return productoRepository.create(nuevoProducto);
+        // Verificar el nombre y crear el producto en la misma transacción evita duplicados simultáneos.
+        return ejecutarTransaccion(async (tx) => {
+            await this.#validarNombreDisponible(nombre, null, tx);
+            const nuevoProducto = new Producto(
+                null, nombre.trim(), descripcion.trim(), precio, stock, categoria, destacado, porEncargo
+            );
+            return productoRepository.create(nuevoProducto, tx);
+        });
     }
 
-    actualizar(id, datos = {}) {
-        this.obtenerPorId(id);
-
+    async actualizar(id, datos = {}) {
         const datosActualizados = {};
         for (const campo of CAMPOS_ACTUALIZABLES) {
             if (datos[campo] !== undefined) {
@@ -48,19 +50,25 @@ class ProductoService {
 
         this.#validarCampos(datosActualizados, { parcial: true });
         if (datosActualizados.nombre !== undefined) {
-            this.#validarNombreDisponible(datosActualizados.nombre, id);
             datosActualizados.nombre = datosActualizados.nombre.trim();
         }
         if (datosActualizados.descripcion !== undefined) {
             datosActualizados.descripcion = datosActualizados.descripcion.trim();
         }
 
-        return productoRepository.update(id, datosActualizados);
+        return ejecutarTransaccion(async (tx) => {
+            const producto = await this.obtenerPorId(id, tx);
+            if (datosActualizados.nombre !== undefined) {
+                await this.#validarNombreDisponible(datosActualizados.nombre, id, tx);
+            }
+            await productoRepository.update(id, datosActualizados, tx);
+            return Object.assign(producto, datosActualizados);
+        });
     }
 
-    eliminar(id) {
-        this.obtenerPorId(id);
-        productoRepository.delete(id);
+    async eliminar(id) {
+        await this.obtenerPorId(id);
+        await productoRepository.delete(id);
     }
 
     // En modo parcial (PUT) solo se validan los campos presentes.
@@ -89,8 +97,8 @@ class ProductoService {
         }
     }
 
-    #validarNombreDisponible(nombre, idActual = null) {
-        const existente = productoRepository.findByNombre(nombre.trim());
+    async #validarNombreDisponible(nombre, idActual, tx) {
+        const existente = await productoRepository.findByNombre(nombre, tx);
         if (existente && existente.id !== idActual) {
             throw new ConflictError(Messages.PRODUCT_NAME_DUPLICATED);
         }

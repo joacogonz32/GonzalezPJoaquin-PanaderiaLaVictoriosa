@@ -1,6 +1,6 @@
 import { Categorias } from '../enums/Categorias.js';
 
-// Catálogo inicial cargado en memoria al iniciar el servidor.
+// Catálogo inicial que "npm run seed" carga en Firestore.
 export const productosIniciales = [
     {
         nombre: "Medialunas de manteca",

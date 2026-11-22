@@ -6,16 +6,17 @@ Muestra en un solo recorrido: autenticación, roles, patrón Strategy, validaci�
 
 ## Antes de grabar
 
-1. Reiniciar el backend (`cd Backend && npm start`) para partir de los datos iniciales.
-2. Levantar el frontend (`cd Frontend && npm run dev`) y abrir `http://localhost:5173`.
-3. Tener abiertos en el editor los archivos que se listan abajo.
-4. Cerrar sesión en el navegador si había una abierta.
-5. Grabar en MP4 (por ejemplo con la Barra de juegos de Windows, `Win + Alt + R`, o con OBS).
+1. (Opcional) Para partir de los datos iniciales: `cd Backend && npm run seed -- --reset`. **Borra también las cuentas de clientes**: después hay que volver a crear la tuya desde "Crear cuenta" (o registrarla durante el video en el paso 4).
+2. Levantar el backend (`cd Backend && npm start`).
+3. Levantar el frontend (`cd Frontend && npm run dev`) y abrir `http://localhost:5173`.
+4. Tener abiertos en el editor los archivos que se listan abajo, y la [consola de Firebase](https://console.firebase.google.com) en **Firestore Database**.
+5. Cerrar sesión en el navegador si había una abierta.
+6. Grabar en MP4 (por ejemplo con la Barra de juegos de Windows, `Win + Alt + R`, o con OBS).
 
 ## 1. Presentación (≈ 30 s)
 
 - Negocio: Panadería La Victoriosa, Villa Urquiza.
-- Stack: React + Vite en el frontend; Node + Express con arquitectura MVC y datos en memoria en el backend.
+- Stack: React + Vite en el frontend; Node + Express con arquitectura MVC en el backend y base de datos Firebase Cloud Firestore.
 - Flujo que se va a mostrar: encargo de una torta de principio a fin.
 
 ## 2. Backend: cómo se implementa el flujo (≈ 3 min)
@@ -27,9 +28,9 @@ Seguir el camino de la request `POST /api/pedidos`:
 | Ruta | `Backend/src/routes/pedidoRoutes.js` | `autenticar` y `autorizar(Roles.CLIENTE)`: solo un cliente logueado puede crear pedidos |
 | Middleware | `Backend/src/middlewares/auth.js` | Lee el token `Bearer` y deja el usuario en `req.usuario` |
 | Controller | `Backend/src/controllers/PedidoController.js` | Solo recibe la request, llama al service y responde con `successResponse` |
-| Service | `Backend/src/services/PedidoService.js` → `crear()` | Elige la estrategia por `tipo`, valida los productos, calcula el total y guarda el pedido |
+| Service | `Backend/src/services/PedidoService.js` → `crear()` | Elige la estrategia por `tipo` y, dentro de una **transacción**, lee los productos, valida, calcula el total y guarda el pedido (en un pedido regular también descuenta el stock) |
 | Strategy | `Backend/src/strategies/PedidoEncargoStrategy.js` | Regla de 48 hs, seña del 50% y flujo con "Seña confirmada". Comparar con `PedidoRegularStrategy.js` (stock) |
-| Repository | `Backend/src/repositories/PedidoRepository.js` | Guarda el pedido en el array en memoria |
+| Repository | `Backend/src/repositories/PedidoRepository.js` | Guarda el pedido en la colección `pedidos` de Firestore. El *converter* traduce entre la clase `Pedido` y el documento, y `ContadorRepository` le asigna el número de pedido |
 | Errores | `Backend/src/exceptions/AppError.js`, `enums/Messages.js`, `middlewares/errorHandler.js` | El service lanza `BadRequestError(Messages.ORDER_PICKUP_TOO_SOON(48))` y el middleware arma `{ success: false, message }` |
 
 Mencionar también `PATCH /api/pedidos/:id/avanzar`: el service le pide a la estrategia el `siguienteEstado`, así el administrador no puede saltear pasos.
@@ -50,19 +51,20 @@ Mencionar también `PATCH /api/pedidos/:id/avanzar`: el service le pide a la est
 1. **Inicio**: mostrar que respeta el boceto (navbar con logo centrado, hero, productos estrella cargados desde la API).
 2. **Catálogo** → filtrar por "Repostería" → agregar **Torta de cumpleaños** (aparece la notificación lateral).
 3. **Tu pedido**: el tipo queda en "Encargo especial" automáticamente. Mostrar la seña del 50%.
-4. Hacer click en **Ingresar para confirmar** → iniciar sesión con `cliente@demo.com` / `cliente123` → vuelve al pedido con lo elegido.
+4. Hacer click en **Ingresar para confirmar** → iniciar sesión con tu cuenta de cliente (o entrar en **Registrate** y crearla en ese momento) → vuelve al pedido con lo elegido.
 5. Elegir una fecha de retiro para **mañana** → confirmar → aparece el error de las 48 hs.
 6. Elegir una fecha dentro de **3 días** → confirmar → notificación "¡Pedido confirmado!" y redirección a **Mis pedidos** con el encargo en "Pendiente".
-7. **Salir** → ingresar con `admin@lavictoriosa.com` / `admin1234` → **Gestionar pedidos**.
+7. **Salir** → ingresar con la cuenta de administrador (la definida en `Backend/.env`) → **Gestionar pedidos**.
 8. Hacer click en **Pasar a «Seña confirmada»** y luego en **Pasar a «En preparación»**. Mostrar que desaparece el botón "Rechazar encargo".
 9. **Salir** → volver a ingresar como cliente → **Mis pedidos**: el encargo está "En preparación" y ya no tiene botón de cancelar (regla de negocio).
+10. **Consola de Firebase** → Firestore → colección `pedidos`: abrir el documento del encargo y mostrar que el estado, la seña y la fecha de retiro quedaron guardados en la base.
 
 Opcional, si sobra tiempo: en **Gestionar productos**, intentar eliminar un producto y mostrar el diálogo de confirmación.
 
 ## 5. Cierre (≈ 30 s)
 
 - La información siempre viene del backend; las reglas de negocio se validan en el backend aunque el frontend también valide.
-- Arquitectura: rutas → middlewares → controllers → services → strategies → repositories, con errores y mensajes centralizados.
+- Arquitectura: rutas → middlewares → controllers → services → strategies → repositories → Firestore, con errores y mensajes centralizados. Solo los repositories conocen la base de datos.
 
 ## Checklist de entrega
 

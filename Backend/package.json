@@ -1,16 +1,22 @@
 {
   "name": "panaderia-la-victoriosa-backend",
   "version": "1.0.0",
-  "description": "Backend de Panaderia La Victoriosa. Arquitectura MVC con persistencia en memoria (arrays), sin base de datos.",
+  "description": "Backend de Panaderia La Victoriosa. Arquitectura MVC con persistencia en Firebase (Cloud Firestore).",
   "type": "module",
   "main": "server.js",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.2.1"
+    "dotenv": "^18.0.10",
+    "express": "^5.2.1",
+    "firebase-admin": "^14.5.1"
   }
 }

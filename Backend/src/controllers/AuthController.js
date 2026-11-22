@@ -2,27 +2,27 @@ import authService from '../services/AuthService.js';
 import { successResponse } from '../responses/ApiResponse.js';
 
 class AuthController {
-    registrar(req, res, next) {
+    async registrar(req, res, next) {
         try {
-            const sesion = authService.registrar(req.body);
+            const sesion = await authService.registrar(req.body);
             return successResponse(res, sesion, 201);
         } catch (error) {
             next(error);
         }
     }
 
-    login(req, res, next) {
+    async login(req, res, next) {
         try {
-            const sesion = authService.login(req.body);
+            const sesion = await authService.login(req.body);
             return successResponse(res, sesion);
         } catch (error) {
             next(error);
         }
     }
 
-    logout(req, res, next) {
+    async logout(req, res, next) {
         try {
-            authService.logout(req.token);
+            await authService.logout(req.token);
             return successResponse(res, null);
         } catch (error) {
             next(error);

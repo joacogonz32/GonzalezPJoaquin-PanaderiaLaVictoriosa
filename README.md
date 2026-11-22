@@ -6,12 +6,14 @@ Sistema web para la panadería: catálogo de productos, **Pedidos Regulares** (p
 
 ## Cómo ejecutar el sistema
 
-Se necesitan Node.js 20 o superior y dos terminales.
+Se necesitan Node.js 22 o superior, dos terminales y un proyecto de Firebase con Cloud Firestore (ver [Base de datos](#base-de-datos-firebase-cloud-firestore)).
 
 ```bash
 # Terminal 1: backend (http://localhost:3000)
 cd Backend
 npm install
+# (solo la primera vez) configurar Backend/.env y cargar los datos iniciales:
+npm run seed
 npm start
 
 # Terminal 2: frontend (http://localhost:5173)
@@ -22,18 +24,64 @@ npm run dev
 
 El frontend usa `http://localhost:3000/api` por defecto. Para cambiarlo, copiar `Frontend/.env.example` como `Frontend/.env` y editar `VITE_API_URL`.
 
-> Los datos se guardan en memoria (arrays): al reiniciar el backend se vuelve al catálogo y los usuarios iniciales, y se pierden los pedidos y las cuentas creadas.
+Los datos se guardan en Firestore: los productos, usuarios, pedidos y sesiones se mantienen aunque se reinicie el backend.
 
-### Cuentas de prueba
+### Cuentas
 
-Se cargan al iniciar el backend ([Backend/src/data/usuarios.js](Backend/src/data/usuarios.js)):
+- **Administrador**: no puede registrarse desde la web. `npm run seed` lo crea con el email y la contraseña definidos en `Backend/.env` (`SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD`), que no se suben al repositorio.
+- **Clientes**: se registran desde "Crear cuenta".
 
-| Rol           | Email                    | Contraseña  |
-|---------------|--------------------------|-------------|
-| Administrador | `admin@lavictoriosa.com` | `admin1234` |
-| Cliente       | `cliente@demo.com`       | `cliente123`|
+## Base de datos (Firebase Cloud Firestore)
 
-También se puede crear una cuenta de cliente nueva desde "Crear cuenta".
+Solo el backend se conecta a Firestore, con el SDK `firebase-admin`. El frontend no cambia: sigue hablando únicamente con la API. Dentro del backend, la base solo se usa desde la capa **Repositories**; routes, controllers, services y strategies no conocen Firestore.
+
+### Configuración (una sola vez)
+
+1. Entrar a [console.firebase.google.com](https://console.firebase.google.com) → **Crear un proyecto** (Google Analytics se puede desactivar).
+2. En el menú **Compilación → Firestore Database** → **Crear base de datos**. Elegir una ubicación cercana (por ejemplo `southamerica-east1`, São Paulo) y el **modo de producción**. Ese modo bloquea el acceso directo desde navegadores; el backend no se ve afectado porque `firebase-admin` accede con la cuenta de servicio.
+3. En **Configuración del proyecto** (ícono de engranaje) → **Cuentas de servicio** → **Generar nueva clave privada**. Guardar el archivo descargado como `Backend/firebase-credentials.json`.
+4. Copiar `Backend/.env.example` como `Backend/.env` y completar `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` con los datos que se quieran para el administrador.
+5. Desde `Backend/`, ejecutar `npm run seed` para cargar el catálogo y la cuenta de administrador.
+
+> `Backend/.env` y `Backend/firebase-credentials.json` están en el `.gitignore`: **nunca deben subirse al repositorio**, porque la clave da acceso total a la base.
+
+Al iniciar, el backend comprueba la conexión. Si falta la configuración o la base no responde, muestra un mensaje que lo indica y no arranca. Si la base está vacía, avisa que hay que ejecutar el seed.
+
+### Carga inicial
+
+| Comando | Qué hace |
+|---------|----------|
+| `npm run seed` | Carga los 11 productos del catálogo ([Backend/src/data/productos.js](Backend/src/data/productos.js)) y el administrador. Si la base ya tiene datos, no hace nada. |
+| `npm run seed -- --reset` | **Borra toda la base** (productos, usuarios, pedidos y sesiones) y la vuelve a cargar. Las cuentas de clientes también se borran. |
+
+### Colecciones
+
+| Colección | Documento | Campos |
+|-----------|-----------|--------|
+| `productos` | `productos/{id}` | `id`, `nombre`, `nombreNormalizado`, `descripcion`, `precio`, `stock`, `categoria`, `destacado`, `porEncargo` |
+| `usuarios` | `usuarios/{id}` | `id`, `nombre`, `email` (en minúsculas), `contrasena` (hash `salt:hash` con scrypt), `telefono`, `rol` |
+| `pedidos` | `pedidos/{id}` | `id`, `clienteId`, `fecha`, `tipo`, `estado`, `total`, `detalles` (lista de `{ productoId, nombreProducto, precioUnitario, cantidad, subtotal }`), `fechaRetiro`, `montoSenia` |
+| `sesiones` | `sesiones/{token}` | `usuarioId`, `creadaEn` |
+| `contadores` | `contadores/{coleccion}` | `ultimoId` |
+
+Decisiones de diseño:
+
+- **IDs numéricos** (`1`, `2`, `3`…) en lugar de los IDs automáticos de Firestore, para mantener la API, la validación de rutas y los números de pedido legibles. Cada colección tiene un documento en `contadores` que se incrementa dentro de una transacción, así dos altas simultáneas nunca reciben el mismo ID.
+- **Converters**: cada repository convierte entre la clase del modelo (`Producto`, `Cliente`/`Administrador` según el `rol`, `Pedido` con sus `DetallePedido`) y el documento de Firestore. Las fechas se guardan como `Timestamp` y la API las sigue devolviendo en formato ISO 8601.
+- **Detalles dentro del pedido**: las líneas se guardan en el mismo documento porque siempre se leen junto con el pedido y conservan nombre y precio del momento de la compra.
+- **`nombreNormalizado`**: Firestore distingue mayúsculas al comparar, por eso se guarda el nombre en minúsculas para detectar productos duplicados.
+- **Transacciones**: crear un pedido y descontar el stock, cancelarlo y reponer el stock, avanzar un estado, y las altas que verifican duplicados (email, nombre de producto) se hacen en transacciones. Si dos clientes compran el último producto a la vez, solo uno lo consigue y el otro recibe el error de stock insuficiente.
+- **Sin índices compuestos**: las consultas usan solo filtros por igualdad y el ordenamiento se hace en el service, así no hace falta crear índices en la consola.
+
+### Alternativa: emulador local
+
+Para trabajar sin conexión ni cuenta de Google se puede usar el [emulador de Firestore](https://firebase.google.com/docs/emulator-suite). Requiere Java 11 o superior.
+
+```bash
+npx firebase-tools emulators:start --only firestore --project demo-la-victoriosa
+```
+
+Después, en `Backend/.env`, descomentar `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` y `FIREBASE_PROJECT_ID=demo-la-victoriosa`, y ejecutar `npm run seed`. Los datos del emulador se borran al cerrarlo.
 
 ## Estructura del repositorio
 
@@ -41,22 +89,25 @@ También se puede crear una cuenta de cliente nueva desde "Crear cuenta".
 TpCallipo-PanaderiaLaVictoriosa/
 ├── Documentacion/          # Relevamiento, análisis del sistema, identidad visual, wireframe y mockup
 ├── Backend/
-│   ├── server.js           # Punto de entrada (levanta el servidor Express)
+│   ├── server.js           # Punto de entrada (verifica la conexión con Firestore y levanta Express)
+│   ├── .env.example        # Plantilla de configuración (credenciales de Firebase y administrador)
+│   ├── scripts/seed.js     # Carga inicial de la base (npm run seed)
 │   ├── postman/            # Colección y environment de Postman
 │   └── src/
 │       ├── app.js          # Configuración de Express (CORS, JSON, rutas y middlewares)
+│       ├── config/         # Variables de entorno y conexión con Firebase
 │       ├── models/         # Clases del dominio (solo atributos)
 │       ├── controllers/    # Reciben request/response y delegan en los services
-│       ├── services/       # Lógica de negocio y validaciones
+│       ├── services/       # Lógica de negocio, validaciones y transacciones
 │       ├── strategies/     # Patrón Strategy: reglas y flujo de estados de cada tipo de pedido
-│       ├── repositories/   # Acceso a los datos (arrays en memoria)
-│       ├── data/           # Datos iniciales (catálogo y usuarios de prueba)
+│       ├── repositories/   # Acceso a Firestore: convierten documentos en modelos y viceversa
+│       ├── data/           # Catálogo inicial que carga el seed
 │       ├── routes/         # Definición de endpoints por recurso
 │       ├── middlewares/    # Errores, rutas inexistentes, autenticación/roles y validación de ID
 │       ├── responses/      # Formato consistente de respuestas HTTP
 │       ├── exceptions/     # AppError y sus subclases
-│       ├── enums/          # Mensajes, roles, categorías, tipos/estados de pedido y reglas
-│       └── utils/          # Validadores, hash de contraseñas y generador de IDs
+│       ├── enums/          # Mensajes, roles, categorías, tipos/estados de pedido, reglas y colecciones
+│       └── utils/          # Validadores y hash de contraseñas
 ├── Frontend/
 │   └── src/
 │       ├── App.jsx         # Rutas de la aplicación
@@ -104,7 +155,7 @@ Todas las respuestas tienen el mismo formato:
 { "success": false, "message": "El producto no existe." }
 ```
 
-Los errores se lanzan como `AppError` (`BadRequestError` 400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, `ConflictError` 409) con mensajes de `enums/Messages.js`, y el middleware `errorHandler` los convierte en la respuesta HTTP. Un JSON mal formado responde 400 y cualquier error no previsto, 500.
+Los errores se lanzan como `AppError` (`BadRequestError` 400, `UnauthorizedError` 401, `ForbiddenError` 403, `NotFoundError` 404, `ConflictError` 409) con mensajes de `enums/Messages.js`, y el middleware `errorHandler` los convierte en la respuesta HTTP. Un JSON mal formado responde 400; si la base de datos no responde, 503; y cualquier otro error no previsto, 500.
 
 Las rutas protegidas reciben el token devuelto por el login en el header `Authorization: Bearer <token>`.
 
@@ -177,17 +228,20 @@ Cada pedido devuelto incluye además `cliente`, `flujo` (estados de su tipo), `s
 En [Backend/postman/](Backend/postman/) está la colección lista para importar:
 
 - `PanaderiaLaVictoriosa.postman_collection.json`
-- `PanaderiaLaVictoriosa.postman_environment.json` (variable `baseUrl = http://localhost:3000`)
+- `PanaderiaLaVictoriosa.postman_environment.json` (variables `baseUrl`, `adminEmail` y `adminPassword`)
 
 1. Abrir Postman → **Import** → seleccionar ambos archivos.
-2. Elegir el environment "Panadería La Victoriosa - Local".
-3. Con el servidor corriendo, ejecutar la colección en orden. La carpeta **0. Autenticación** inicia sesión y guarda los tokens que usan las demás requests.
+2. Elegir el environment "Panadería La Victoriosa - Local" y completar `adminEmail` y `adminPassword` con los valores de `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` del `.env`.
+3. Con el servidor corriendo, ejecutar la colección en orden. La carpeta **0. Autenticación** inicia sesión como administrador, registra un cliente de prueba nuevo (con un email único por ejecución) y guarda los tokens que usan las demás requests.
+
+> Como los datos ahora persisten, cada ejecución deja en la base un cliente de prueba (`cliente.<número>@prueba.com`) y un pedido cancelado. Para limpiarlos: `npm run seed -- --reset`.
 
 También se puede correr con [Newman](https://www.npmjs.com/package/newman):
 
 ```bash
 cd Backend/postman
-npx newman run PanaderiaLaVictoriosa.postman_collection.json -e PanaderiaLaVictoriosa.postman_environment.json
+npx newman run PanaderiaLaVictoriosa.postman_collection.json -e PanaderiaLaVictoriosa.postman_environment.json \
+  --env-var adminEmail=<email del admin> --env-var adminPassword=<contraseña del admin>
 ```
 
 ## Frontend

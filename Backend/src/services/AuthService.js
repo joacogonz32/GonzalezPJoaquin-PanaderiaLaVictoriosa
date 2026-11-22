@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Cliente from '../models/Cliente.js';
 import usuarioRepository from '../repositories/UsuarioRepository.js';
 import sesionRepository from '../repositories/SesionRepository.js';
+import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { BadRequestError, ConflictError, UnauthorizedError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
@@ -12,7 +13,7 @@ const DIGITOS_MINIMOS_TELEFONO = 8;
 
 class AuthService {
     // Solo los clientes se registran desde la web.
-    registrar(datos = {}) {
+    async registrar(datos = {}) {
         const { nombre, email, contrasena, telefono } = datos;
 
         if (![nombre, email, contrasena, telefono].every(isNonEmptyString)) {
@@ -27,18 +28,25 @@ class AuthService {
         if (countDigits(telefono) < DIGITOS_MINIMOS_TELEFONO) {
             throw new BadRequestError(Messages.USER_INVALID_PHONE);
         }
-        if (usuarioRepository.findByEmail(email.trim())) {
-            throw new ConflictError(Messages.USER_EMAIL_DUPLICATED);
-        }
 
-        const cliente = new Cliente(
-            null, nombre.trim(), email.trim().toLowerCase(), hashPassword(contrasena), telefono.trim()
-        );
-        usuarioRepository.create(cliente);
+        const contrasenaHasheada = hashPassword(contrasena);
+
+        // La verificación del email y el alta van en la misma transacción
+        // para que dos registros simultáneos no creen el mismo email dos veces.
+        const cliente = await ejecutarTransaccion(async (tx) => {
+            if (await usuarioRepository.findByEmail(email, tx)) {
+                throw new ConflictError(Messages.USER_EMAIL_DUPLICATED);
+            }
+            const nuevoCliente = new Cliente(
+                null, nombre.trim(), email.trim().toLowerCase(), contrasenaHasheada, telefono.trim()
+            );
+            return usuarioRepository.create(nuevoCliente, tx);
+        });
+
         return this.#iniciarSesion(cliente);
     }
 
-    login(datos = {}) {
+    async login(datos = {}) {
         const { email, contrasena } = datos;
 
         if (!isNonEmptyString(email) || !isNonEmptyString(contrasena)) {
@@ -48,20 +56,20 @@ class AuthService {
             throw new BadRequestError(Messages.USER_INVALID_EMAIL);
         }
 
-        const usuario = usuarioRepository.findByEmail(email.trim());
+        const usuario = await usuarioRepository.findByEmail(email);
         if (!usuario || !verifyPassword(contrasena, usuario.contrasena)) {
             throw new UnauthorizedError(Messages.INVALID_CREDENTIALS);
         }
         return this.#iniciarSesion(usuario);
     }
 
-    logout(token) {
-        sesionRepository.delete(token);
+    async logout(token) {
+        await sesionRepository.delete(token);
     }
 
-    obtenerUsuarioPorToken(token) {
-        const usuarioId = sesionRepository.findUsuarioId(token);
-        const usuario = usuarioId ? usuarioRepository.findById(usuarioId) : null;
+    async obtenerUsuarioPorToken(token) {
+        const usuarioId = await sesionRepository.findUsuarioId(token);
+        const usuario = usuarioId ? await usuarioRepository.findById(usuarioId) : null;
         if (!usuario) {
             throw new UnauthorizedError(Messages.INVALID_SESSION);
         }
@@ -74,9 +82,9 @@ class AuthService {
         return datosPublicos;
     }
 
-    #iniciarSesion(usuario) {
+    async #iniciarSesion(usuario) {
         const token = randomUUID();
-        sesionRepository.create(token, usuario.id);
+        await sesionRepository.create(token, usuario.id);
         return { token, usuario: this.aDatosPublicos(usuario) };
     }
 }

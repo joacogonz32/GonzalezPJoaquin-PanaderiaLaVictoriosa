@@ -3,6 +3,7 @@ import DetallePedido from '../models/DetallePedido.js';
 import pedidoRepository from '../repositories/PedidoRepository.js';
 import productoRepository from '../repositories/ProductoRepository.js';
 import usuarioRepository from '../repositories/UsuarioRepository.js';
+import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { obtenerEstrategia } from '../strategies/pedidoStrategyFactory.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
@@ -11,7 +12,9 @@ import { Roles } from '../enums/Roles.js';
 import { isPositiveInteger } from '../utils/validators.js';
 
 class PedidoService {
-    crear(clienteId, datos = {}) {
+    // Crear el pedido y descontar el stock ocurre en una única transacción:
+    // si dos clientes compran el último producto a la vez, solo uno lo consigue.
+    async crear(clienteId, datos = {}) {
         const { tipo, detalles, fechaRetiro } = datos;
 
         const estrategia = obtenerEstrategia(tipo);
@@ -19,100 +22,121 @@ class PedidoService {
             throw new BadRequestError(Messages.ORDER_INVALID_TYPE);
         }
 
-        const items = this.#resolverItems(detalles);
+        const lineas = this.#validarLineas(detalles);
         const fecha = this.#parsearFechaRetiro(fechaRetiro);
-        estrategia.validar(items, fecha);
 
-        const detallesPedido = items.map(({ producto, cantidad }) =>
-            new DetallePedido(producto.id, producto.nombre, producto.precio, cantidad)
-        );
-        const total = detallesPedido.reduce((suma, detalle) => suma + detalle.subtotal, 0);
+        const pedido = await ejecutarTransaccion(async (tx) => {
+            // 1. Lecturas: productos con su stock actual.
+            const items = await this.#resolverItems(lineas, tx);
+            estrategia.validar(items, fecha);
 
-        if (estrategia.afectaStock()) {
-            for (const { producto, cantidad } of items) {
-                productoRepository.update(producto.id, { stock: producto.stock - cantidad });
+            const detallesPedido = items.map(({ producto, cantidad }) =>
+                new DetallePedido(producto.id, producto.nombre, producto.precio, cantidad)
+            );
+            const total = detallesPedido.reduce((suma, detalle) => suma + detalle.subtotal, 0);
+
+            // 2. Escrituras: el pedido y, si corresponde, el nuevo stock.
+            const nuevoPedido = await pedidoRepository.create(new Pedido(
+                null,
+                clienteId,
+                new Date().toISOString(),
+                tipo,
+                estrategia.estadoInicial(),
+                total,
+                detallesPedido,
+                fecha ? fecha.toISOString() : null,
+                estrategia.calcularSenia(total)
+            ), tx);
+
+            if (estrategia.afectaStock()) {
+                for (const { producto, cantidad } of items) {
+                    await productoRepository.update(producto.id, { stock: producto.stock - cantidad }, tx);
+                }
             }
-        }
+            return nuevoPedido;
+        });
 
-        const pedido = new Pedido(
-            null,
-            clienteId,
-            new Date().toISOString(),
-            tipo,
-            estrategia.estadoInicial(),
-            total,
-            detallesPedido,
-            fecha ? fecha.toISOString() : null,
-            estrategia.calcularSenia(total)
-        );
-        return this.#aRespuesta(pedidoRepository.create(pedido));
+        return this.#aRespuesta(pedido);
     }
 
-    obtenerTodos({ estado, tipo } = {}) {
-        return this.#ordenarPorFecha(pedidoRepository.findAll())
-            .filter((pedido) => !estado || pedido.estado === estado)
-            .filter((pedido) => !tipo || pedido.tipo === tipo)
-            .map((pedido) => this.#aRespuesta(pedido));
+    async obtenerTodos({ estado, tipo } = {}) {
+        const pedidos = await pedidoRepository.findAll({ estado, tipo });
+        return this.#aRespuestas(this.#ordenarPorFecha(pedidos));
     }
 
-    obtenerDeCliente(clienteId) {
-        return this.#ordenarPorFecha(pedidoRepository.findByClienteId(clienteId))
-            .map((pedido) => this.#aRespuesta(pedido));
+    async obtenerDeCliente(clienteId) {
+        const pedidos = await pedidoRepository.findByClienteId(clienteId);
+        return this.#aRespuestas(this.#ordenarPorFecha(pedidos));
     }
 
-    obtenerPorId(id, usuario) {
-        return this.#aRespuesta(this.#buscarAccesible(id, usuario));
+    async obtenerPorId(id, usuario) {
+        return this.#aRespuesta(await this.#buscarAccesible(id, usuario));
     }
 
     // Solo el administrador avanza el estado, siguiendo el flujo de la estrategia.
-    avanzarEstado(id) {
-        const pedido = this.#buscar(id);
-        const siguiente = obtenerEstrategia(pedido.tipo).siguienteEstado(pedido.estado);
-        if (!siguiente) {
-            throw new ConflictError(Messages.ORDER_FINAL_STATE);
-        }
-        return this.#aRespuesta(pedidoRepository.update(id, { estado: siguiente }));
+    async avanzarEstado(id) {
+        const pedido = await ejecutarTransaccion(async (tx) => {
+            const pedidoActual = await this.#buscar(id, tx);
+            const siguiente = obtenerEstrategia(pedidoActual.tipo).siguienteEstado(pedidoActual.estado);
+            if (!siguiente) {
+                throw new ConflictError(Messages.ORDER_FINAL_STATE);
+            }
+            await pedidoRepository.update(id, { estado: siguiente }, tx);
+            pedidoActual.estado = siguiente;
+            return pedidoActual;
+        });
+        return this.#aRespuesta(pedido);
     }
 
     // El cliente cancela su pedido; el administrador también puede rechazarlo.
-    cancelar(id, usuario) {
-        const pedido = this.#buscarAccesible(id, usuario);
-        const estrategia = obtenerEstrategia(pedido.tipo);
+    async cancelar(id, usuario) {
+        const pedido = await ejecutarTransaccion(async (tx) => {
+            // 1. Lecturas: el pedido y, si devuelve stock, sus productos.
+            const pedidoActual = await this.#buscarAccesible(id, usuario, tx);
+            const estrategia = obtenerEstrategia(pedidoActual.tipo);
 
-        if (!estrategia.puedeCancelarse(pedido.estado)) {
-            throw new ConflictError(Messages.ORDER_CANNOT_CANCEL);
-        }
+            if (!estrategia.puedeCancelarse(pedidoActual.estado)) {
+                throw new ConflictError(Messages.ORDER_CANNOT_CANCEL);
+            }
 
-        if (estrategia.afectaStock()) {
-            for (const detalle of pedido.detalles) {
-                const producto = productoRepository.findById(detalle.productoId);
+            const productos = estrategia.afectaStock()
+                ? await Promise.all(pedidoActual.detalles.map((detalle) => productoRepository.findById(detalle.productoId, tx)))
+                : [];
+
+            // 2. Escrituras: el nuevo estado y la devolución del stock
+            // (los productos eliminados del catálogo se omiten).
+            await pedidoRepository.update(id, { estado: EstadosPedido.CANCELADO }, tx);
+            for (const [indice, producto] of productos.entries()) {
                 if (producto) {
-                    productoRepository.update(producto.id, { stock: producto.stock + detalle.cantidad });
+                    const { cantidad } = pedidoActual.detalles[indice];
+                    await productoRepository.update(producto.id, { stock: producto.stock + cantidad }, tx);
                 }
             }
-        }
 
-        return this.#aRespuesta(pedidoRepository.update(id, { estado: EstadosPedido.CANCELADO }));
+            pedidoActual.estado = EstadosPedido.CANCELADO;
+            return pedidoActual;
+        });
+        return this.#aRespuesta(pedido);
     }
 
-    #buscar(id) {
-        const pedido = pedidoRepository.findById(id);
+    async #buscar(id, tx) {
+        const pedido = await pedidoRepository.findById(id, tx);
         if (!pedido) {
             throw new NotFoundError(Messages.ORDER_NOT_FOUND);
         }
         return pedido;
     }
 
-    #buscarAccesible(id, usuario) {
-        const pedido = this.#buscar(id);
+    async #buscarAccesible(id, usuario, tx) {
+        const pedido = await this.#buscar(id, tx);
         if (usuario.rol !== Roles.ADMINISTRADOR && pedido.clienteId !== usuario.id) {
             throw new ForbiddenError(Messages.FORBIDDEN);
         }
         return pedido;
     }
 
-    // Convierte [{ productoId, cantidad }] en [{ producto, cantidad }] validando cada línea.
-    #resolverItems(detalles) {
+    // Valida el formato de cada línea ({ productoId, cantidad }) antes de consultar la base.
+    #validarLineas(detalles) {
         if (!Array.isArray(detalles) || detalles.length === 0) {
             throw new BadRequestError(Messages.ORDER_EMPTY);
         }
@@ -127,12 +151,20 @@ class PedidoService {
                 throw new BadRequestError(Messages.ORDER_DUPLICATED_ITEM);
             }
             idsVistos.add(productoId);
+            return { productoId, cantidad };
+        });
+    }
 
-            const producto = productoRepository.findById(productoId);
-            if (!producto) {
+    // Convierte [{ productoId, cantidad }] en [{ producto, cantidad }] leyendo cada producto.
+    async #resolverItems(lineas, tx) {
+        const productos = await Promise.all(
+            lineas.map(({ productoId }) => productoRepository.findById(productoId, tx))
+        );
+        return lineas.map(({ cantidad }, indice) => {
+            if (!productos[indice]) {
                 throw new NotFoundError(Messages.PRODUCT_NOT_FOUND);
             }
-            return { producto, cantidad };
+            return { producto: productos[indice], cantidad };
         });
     }
 
@@ -151,22 +183,32 @@ class PedidoService {
         return [...pedidos].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id - a.id);
     }
 
-    // Agrega al pedido los datos del cliente y la información del flujo de estados,
-    // para que el frontend no tenga que duplicar las reglas de la Strategy.
-    #aRespuesta(pedido) {
-        const estrategia = obtenerEstrategia(pedido.tipo);
-        const cliente = usuarioRepository.findById(pedido.clienteId);
-        const cancelado = pedido.estado === EstadosPedido.CANCELADO;
+    async #aRespuesta(pedido) {
+        const [respuesta] = await this.#aRespuestas([pedido]);
+        return respuesta;
+    }
 
-        return {
-            ...pedido,
-            cliente: cliente
-                ? { id: cliente.id, nombre: cliente.nombre, email: cliente.email, telefono: cliente.telefono }
-                : null,
-            flujo: estrategia.flujo,
-            siguienteEstado: cancelado ? null : estrategia.siguienteEstado(pedido.estado),
-            cancelable: estrategia.puedeCancelarse(pedido.estado)
-        };
+    // Agrega a cada pedido los datos del cliente y la información del flujo de estados,
+    // para que el frontend no tenga que duplicar las reglas de la Strategy.
+    // Los clientes se leen todos juntos en una sola consulta.
+    async #aRespuestas(pedidos) {
+        const clientes = await usuarioRepository.findByIds(pedidos.map((pedido) => pedido.clienteId));
+
+        return pedidos.map((pedido) => {
+            const estrategia = obtenerEstrategia(pedido.tipo);
+            const cliente = clientes.get(pedido.clienteId);
+            const cancelado = pedido.estado === EstadosPedido.CANCELADO;
+
+            return {
+                ...pedido,
+                cliente: cliente
+                    ? { id: cliente.id, nombre: cliente.nombre, email: cliente.email, telefono: cliente.telefono }
+                    : null,
+                flujo: estrategia.flujo,
+                siguienteEstado: cancelado ? null : estrategia.siguienteEstado(pedido.estado),
+                cancelable: estrategia.puedeCancelarse(pedido.estado)
+            };
+        });
     }
 }
 

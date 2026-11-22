@@ -1,56 +1,81 @@
+import { db } from '../config/firebase.js';
 import Producto from '../models/Producto.js';
-import { createIdGenerator } from '../utils/idGenerator.js';
-import { productosIniciales } from '../data/productos.js';
+import contadorRepository from './ContadorRepository.js';
+import { ejecutarTransaccion, escribir, leer } from './transacciones.js';
+import { Colecciones } from '../enums/Colecciones.js';
 
-const productos = [];
-const generateId = createIdGenerator(1);
+// Firestore no compara sin distinguir mayúsculas: se guarda el nombre normalizado
+// para poder detectar duplicados como "Pan francés" y "pan francés".
+const normalizarNombre = (nombre) => nombre.trim().toLowerCase();
 
-class ProductoRepository {
-    constructor() {
-        for (const datos of productosIniciales) {
-            this.create(new Producto(
-                null, datos.nombre, datos.descripcion, datos.precio,
-                datos.stock, datos.categoria, datos.destacado, datos.porEncargo
-            ));
-        }
-    }
-
-    findAll() {
-        return productos;
-    }
-
-    findById(id) {
-        return productos.find((producto) => producto.id === id);
-    }
-
-    findByNombre(nombre) {
-        return productos.find(
-            (producto) => producto.nombre.toLowerCase() === nombre.toLowerCase()
+// Convierte entre la clase Producto y el documento productos/{id}.
+const convertidor = {
+    toFirestore(producto) {
+        return {
+            id: producto.id,
+            nombre: producto.nombre,
+            nombreNormalizado: normalizarNombre(producto.nombre),
+            descripcion: producto.descripcion,
+            precio: producto.precio,
+            stock: producto.stock,
+            categoria: producto.categoria,
+            destacado: producto.destacado,
+            porEncargo: producto.porEncargo
+        };
+    },
+    fromFirestore(documento) {
+        const datos = documento.data();
+        return new Producto(
+            datos.id, datos.nombre, datos.descripcion, datos.precio,
+            datos.stock, datos.categoria, datos.destacado, datos.porEncargo
         );
     }
+};
 
-    create(producto) {
-        producto.id = generateId();
-        productos.push(producto);
+const coleccion = db.collection(Colecciones.PRODUCTOS).withConverter(convertidor);
+const referencia = (id) => coleccion.doc(String(id));
+
+// Todos los métodos aceptan una transacción opcional (`tx`) para que el service
+// pueda combinar varias operaciones de forma atómica (por ejemplo, crear un pedido y descontar stock).
+class ProductoRepository {
+    async findAll() {
+        const resultado = await coleccion.orderBy('id').get();
+        return resultado.docs.map((documento) => documento.data());
+    }
+
+    async findById(id, tx) {
+        const documento = await leer(referencia(id), tx);
+        return documento.exists ? documento.data() : null;
+    }
+
+    async findByNombre(nombre, tx) {
+        const consulta = coleccion.where('nombreNormalizado', '==', normalizarNombre(nombre)).limit(1);
+        const resultado = await leer(consulta, tx);
+        return resultado.empty ? null : resultado.docs[0].data();
+    }
+
+    async create(producto, tx) {
+        if (!tx) {
+            return ejecutarTransaccion((nuevaTx) => this.create(producto, nuevaTx));
+        }
+        producto.id = await contadorRepository.siguienteId(Colecciones.PRODUCTOS, tx);
+        tx.set(referencia(producto.id), producto);
         return producto;
     }
 
-    update(id, datosActualizados) {
-        const producto = this.findById(id);
-        if (!producto) {
-            return null;
+    async update(id, datosActualizados, tx) {
+        if (Object.keys(datosActualizados).length === 0) {
+            return;
         }
-        Object.assign(producto, datosActualizados);
-        return producto;
+        const datos = { ...datosActualizados };
+        if (datos.nombre !== undefined) {
+            datos.nombreNormalizado = normalizarNombre(datos.nombre);
+        }
+        await escribir(tx, 'update', referencia(id), datos);
     }
 
-    delete(id) {
-        const index = productos.findIndex((producto) => producto.id === id);
-        if (index === -1) {
-            return false;
-        }
-        productos.splice(index, 1);
-        return true;
+    async delete(id) {
+        await referencia(id).delete();
     }
 }
 
