@@ -81,6 +81,7 @@ export default function RegistroPage() {
               name="telefono"
               type="tel"
               autoComplete="tel"
+              placeholder="+54 9 11 1234-5678"
               value={valores.telefono}
               onChange={cambiar}
               error={errores.telefono}
