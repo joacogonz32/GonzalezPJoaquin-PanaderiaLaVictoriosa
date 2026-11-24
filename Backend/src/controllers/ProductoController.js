@@ -11,9 +11,9 @@ class ProductoController {
         }
     }
 
-    obtenerCategorias(req, res, next) {
+    async obtenerCategorias(req, res, next) {
         try {
-            const categorias = productoService.obtenerCategorias();
+            const categorias = await productoService.obtenerCategorias();
             return successResponse(res, categorias);
         } catch (error) {
             next(error);

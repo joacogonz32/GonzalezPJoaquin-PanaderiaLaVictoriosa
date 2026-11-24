@@ -1,16 +1,21 @@
-// Carga los datos iniciales en Firestore: el catálogo de productos y la cuenta de administrador.
+// Carga los datos iniciales en Firestore: las categorías, el catálogo de productos y la cuenta de administrador.
 //
-//   npm run seed              → carga los datos solo si la base está vacía
-//   npm run seed -- --reset   → BORRA toda la base (productos, usuarios, pedidos y sesiones) y la vuelve a cargar
+//   npm run seed              → carga los datos si la base está vacía; si ya tiene datos, solo agrega
+//                               las categorías cuando falta esa colección (bases creadas antes de existir)
+//   npm run seed -- --reset   → BORRA toda la base (productos, categorías, usuarios, pedidos y sesiones)
+//                               y la vuelve a cargar
 //
 // Las credenciales del administrador se leen de Backend/.env (SEED_ADMIN_*), para que no queden en el repositorio.
 // Los clientes no se cargan acá: se registran desde la web.
 import { db } from '../src/config/firebase.js';
 import Producto from '../src/models/Producto.js';
 import Administrador from '../src/models/Administrador.js';
+import Categoria from '../src/models/Categoria.js';
 import productoRepository from '../src/repositories/ProductoRepository.js';
 import usuarioRepository from '../src/repositories/UsuarioRepository.js';
+import categoriaRepository from '../src/repositories/CategoriaRepository.js';
 import { productosIniciales } from '../src/data/productos.js';
+import { categoriasIniciales } from '../src/data/categorias.js';
 import { Colecciones } from '../src/enums/Colecciones.js';
 import { hashPassword } from '../src/utils/password.js';
 import { countDigits, isNonEmptyString, isValidEmail } from '../src/utils/validators.js';
@@ -56,18 +61,44 @@ async function vaciarBase() {
     }
 }
 
+// Se cargan de a una para que los IDs respeten el orden de la lista.
+async function cargarCategorias(nombres) {
+    for (const nombre of nombres) {
+        await categoriaRepository.create(new Categoria(null, nombre));
+    }
+}
+
+// Para una base que ya tiene productos pero no la colección "categorias":
+// carga las iniciales más cualquier otra que usen los productos existentes.
+async function completarCategorias() {
+    if ((await categoriaRepository.findAll()).length > 0) {
+        return 0;
+    }
+    const productos = await productoRepository.findAll();
+    const nombres = [...new Set([...categoriasIniciales, ...productos.map((producto) => producto.categoria)])];
+    await cargarCategorias(nombres);
+    return nombres.length;
+}
+
 async function main() {
     const administrador = leerAdministrador();
 
     if (await baseTieneDatos()) {
         if (!reiniciar) {
-            console.log('La base ya tiene datos, no se cargó nada.');
+            const agregadas = await completarCategorias();
+            if (agregadas > 0) {
+                console.log(`La base ya tenía datos: solo se agregaron ${agregadas} categorías, que faltaban.`);
+            } else {
+                console.log('La base ya tiene datos, no se cargó nada.');
+            }
             console.log('Para borrarla por completo y volver a cargarla: npm run seed -- --reset');
             return;
         }
-        console.log('Borrando todos los datos (productos, usuarios, pedidos y sesiones)...');
+        console.log('Borrando todos los datos (productos, categorías, usuarios, pedidos y sesiones)...');
         await vaciarBase();
     }
+
+    await cargarCategorias(categoriasIniciales);
 
     // Se cargan de a uno para que los IDs respeten el orden del catálogo.
     for (const datos of productosIniciales) {
@@ -78,7 +109,10 @@ async function main() {
     }
     await usuarioRepository.create(administrador);
 
-    console.log(`Listo: ${productosIniciales.length} productos y la cuenta de administrador (${administrador.email}).`);
+    console.log(
+        `Listo: ${categoriasIniciales.length} categorías, ${productosIniciales.length} productos ` +
+        `y la cuenta de administrador (${administrador.email}).`
+    );
 }
 
 try {

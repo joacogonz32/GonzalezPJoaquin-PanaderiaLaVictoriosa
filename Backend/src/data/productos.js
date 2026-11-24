@@ -1,4 +1,4 @@
-import { Categorias } from '../enums/Categorias.js';
+import { Categorias } from './categorias.js';
 
 // Catálogo inicial que "npm run seed" carga en Firestore.
 export const productosIniciales = [

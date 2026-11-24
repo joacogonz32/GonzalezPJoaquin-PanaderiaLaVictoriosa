@@ -1,9 +1,9 @@
 import Producto from '../models/Producto.js';
 import productoRepository from '../repositories/ProductoRepository.js';
+import categoriaRepository from '../repositories/CategoriaRepository.js';
 import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { BadRequestError, NotFoundError, ConflictError } from '../exceptions/AppError.js';
 import { Messages } from '../enums/Messages.js';
-import { CATEGORIAS_VALIDAS } from '../enums/Categorias.js';
 import { isNonEmptyString, isPositiveNumber, isNonNegativeInteger } from '../utils/validators.js';
 
 const CAMPOS_ACTUALIZABLES = ['nombre', 'descripcion', 'precio', 'stock', 'categoria', 'destacado', 'porEncargo'];
@@ -13,8 +13,10 @@ class ProductoService {
         return productoRepository.findAll();
     }
 
-    obtenerCategorias() {
-        return CATEGORIAS_VALIDAS;
+    // Devuelve los nombres de las categorías cargadas en la base, en orden de alta.
+    async obtenerCategorias() {
+        const categorias = await categoriaRepository.findAll();
+        return categorias.map((categoria) => categoria.nombre);
     }
 
     async obtenerPorId(id, tx) {
@@ -33,6 +35,7 @@ class ProductoService {
         // Verificar el nombre y crear el producto en la misma transacción evita duplicados simultáneos.
         return ejecutarTransaccion(async (tx) => {
             await this.#validarNombreDisponible(nombre, null, tx);
+            await this.#validarCategoriaExistente(categoria, tx);
             const nuevoProducto = new Producto(
                 null, nombre.trim(), descripcion.trim(), precio, stock, categoria, destacado, porEncargo
             );
@@ -61,6 +64,9 @@ class ProductoService {
             if (datosActualizados.nombre !== undefined) {
                 await this.#validarNombreDisponible(datosActualizados.nombre, id, tx);
             }
+            if (datosActualizados.categoria !== undefined) {
+                await this.#validarCategoriaExistente(datosActualizados.categoria, tx);
+            }
             await productoRepository.update(id, datosActualizados, tx);
             return Object.assign(producto, datosActualizados);
         });
@@ -87,13 +93,21 @@ class ProductoService {
         if (debeValidar('stock') && !isNonNegativeInteger(datos.stock)) {
             throw new BadRequestError(Messages.PRODUCT_INVALID_STOCK);
         }
-        if (debeValidar('categoria') && !CATEGORIAS_VALIDAS.includes(datos.categoria)) {
+        // Que la categoría exista en la base se comprueba después, dentro de la transacción.
+        if (debeValidar('categoria') && !isNonEmptyString(datos.categoria)) {
             throw new BadRequestError(Messages.PRODUCT_INVALID_CATEGORY);
         }
         for (const campo of ['destacado', 'porEncargo']) {
             if (datos[campo] !== undefined && typeof datos[campo] !== 'boolean') {
                 throw new BadRequestError(Messages.PRODUCT_INVALID_FLAG);
             }
+        }
+    }
+
+    async #validarCategoriaExistente(nombre, tx) {
+        const categoria = await categoriaRepository.findByNombre(nombre, tx);
+        if (!categoria) {
+            throw new BadRequestError(Messages.PRODUCT_INVALID_CATEGORY);
         }
     }
 
