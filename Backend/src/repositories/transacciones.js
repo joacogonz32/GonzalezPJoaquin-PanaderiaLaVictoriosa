@@ -13,7 +13,7 @@ export function leer(referencia, tx) {
     return tx ? tx.get(referencia) : referencia.get();
 }
 
-// Aplica `set` o `update` dentro de la transacción si se recibe una; si no, directamente.
+// Aplica `set`, `update` o `delete` dentro de la transacción si se recibe una; si no, directamente.
 export async function escribir(tx, operacion, referencia, datos) {
     if (tx) {
         tx[operacion](referencia, datos);

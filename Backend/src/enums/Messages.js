@@ -17,6 +17,11 @@ export const Messages = Object.freeze({
     PRODUCT_INVALID_CATEGORY: "La categoría del producto no es válida.",
     PRODUCT_INVALID_FLAG: "Los campos 'destacado' y 'porEncargo' deben ser verdadero o falso.",
 
+    // Carrito
+    CART_INVALID: "El carrito debe enviarse como una lista de productos en el campo 'items'.",
+    CART_INVALID_ITEM: "Cada producto del carrito debe tener un identificador y una cantidad entera mayor a cero.",
+    CART_DUPLICATED_ITEM: "Un mismo producto no puede aparecer más de una vez en el carrito.",
+
     // Autenticación y usuarios
     USER_NOT_FOUND: "El usuario no existe.",
     USER_REQUIRED_FIELDS: "Nombre, email, contraseña y teléfono son obligatorios.",

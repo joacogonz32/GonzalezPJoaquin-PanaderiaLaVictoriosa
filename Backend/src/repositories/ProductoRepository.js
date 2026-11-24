@@ -48,6 +48,21 @@ class ProductoRepository {
         return documento.exists ? documento.data() : null;
     }
 
+    // Busca varios productos en una sola lectura. Devuelve un Map id -> producto
+    // (los que ya no existen no aparecen).
+    async findByIds(ids) {
+        const unicos = [...new Set(ids)];
+        if (unicos.length === 0) {
+            return new Map();
+        }
+        const documentos = await db.getAll(...unicos.map(referencia));
+        return new Map(
+            documentos
+                .filter((documento) => documento.exists)
+                .map((documento) => [documento.data().id, documento.data()])
+        );
+    }
+
     async findByNombre(nombre, tx) {
         const consulta = coleccion.where('nombreNormalizado', '==', normalizarNombre(nombre)).limit(1);
         const resultado = await leer(consulta, tx);

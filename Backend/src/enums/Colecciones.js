@@ -4,6 +4,7 @@ export const Colecciones = Object.freeze({
     CATEGORIAS: "categorias",
     USUARIOS: "usuarios",
     PEDIDOS: "pedidos",
+    CARRITOS: "carritos",
     SESIONES: "sesiones",
     CONTADORES: "contadores"
 });

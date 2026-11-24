@@ -4,6 +4,7 @@ import PagoSenia from '../models/PagoSenia.js';
 import pedidoRepository from '../repositories/PedidoRepository.js';
 import productoRepository from '../repositories/ProductoRepository.js';
 import usuarioRepository from '../repositories/UsuarioRepository.js';
+import carritoRepository from '../repositories/CarritoRepository.js';
 import { ejecutarTransaccion } from '../repositories/transacciones.js';
 import { obtenerEstrategia } from '../strategies/pedidoStrategyFactory.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../exceptions/AppError.js';
@@ -13,7 +14,7 @@ import { Roles } from '../enums/Roles.js';
 import { isPositiveInteger } from '../utils/validators.js';
 
 class PedidoService {
-    // Crear el pedido y descontar el stock ocurre en una única transacción:
+    // Crear el pedido, descontar el stock y vaciar el carrito ocurre en una única transacción:
     // si dos clientes compran el último producto a la vez, solo uno lo consigue.
     async crear(clienteId, datos = {}) {
         const { tipo, detalles, fechaRetiro } = datos;
@@ -36,7 +37,7 @@ class PedidoService {
             );
             const total = detallesPedido.reduce((suma, detalle) => suma + detalle.subtotal, 0);
 
-            // 2. Escrituras: el pedido y, si corresponde, el nuevo stock.
+            // 2. Escrituras: el pedido, el nuevo stock (si corresponde) y el carrito ya confirmado.
             const nuevoPedido = await pedidoRepository.create(new Pedido(
                 null,
                 clienteId,
@@ -54,6 +55,7 @@ class PedidoService {
                     await productoRepository.update(producto.id, { stock: producto.stock - cantidad }, tx);
                 }
             }
+            await carritoRepository.delete(clienteId, tx);
             return nuevoPedido;
         });
 

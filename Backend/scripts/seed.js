@@ -2,7 +2,7 @@
 //
 //   npm run seed              → carga los datos si la base está vacía; si ya tiene datos, solo agrega
 //                               las categorías cuando falta esa colección (bases creadas antes de existir)
-//   npm run seed -- --reset   → BORRA toda la base (productos, categorías, usuarios, pedidos y sesiones)
+//   npm run seed -- --reset   → BORRA toda la base (productos, categorías, usuarios, pedidos, carritos y sesiones)
 //                               y la vuelve a cargar
 //
 // Las credenciales del administrador se leen de Backend/.env (SEED_ADMIN_*), para que no queden en el repositorio.
@@ -94,7 +94,7 @@ async function main() {
             console.log('Para borrarla por completo y volver a cargarla: npm run seed -- --reset');
             return;
         }
-        console.log('Borrando todos los datos (productos, categorías, usuarios, pedidos y sesiones)...');
+        console.log('Borrando todos los datos (productos, categorías, usuarios, pedidos, carritos y sesiones)...');
         await vaciarBase();
     }
 
