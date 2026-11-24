@@ -5,6 +5,7 @@ import QuantityInput from '../components/QuantityInput'
 import FormField from '../components/FormField'
 import Button from '../components/Button'
 import EmptyState from '../components/EmptyState'
+import Loader from '../components/Loader'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useAuth, useCart, useToast } from '../context/contexts'
 import { getProductos } from '../services/productosService'
@@ -17,7 +18,7 @@ import { NOMBRES_TIPO_PEDIDO, PORCENTAJE_SENIA, TIPOS_PEDIDO } from '../utils/co
 export default function CarritoPage() {
   usePageTitle('Tu pedido')
   const { usuario, esAdmin } = useAuth()
-  const { items, total, cantidadMaxima, actualizarCantidad, quitar, vaciar, sincronizar } = useCart()
+  const { items, cargando, total, cantidadMaxima, actualizarCantidad, quitar, vaciar, sincronizar } = useCart()
   const { mostrarExito, mostrarError, mostrarInfo } = useToast()
   const navigate = useNavigate()
 
@@ -79,6 +80,16 @@ export default function CarritoPage() {
     } finally {
       setEnviando(false)
     }
+  }
+
+  if (items.length === 0 && cargando) {
+    return (
+      <div className="page">
+        <div className="page__container">
+          <Loader texto="Cargando tu pedido…" />
+        </div>
+      </div>
+    )
   }
 
   if (items.length === 0) {
