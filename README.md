@@ -24,7 +24,7 @@ npm run dev
 
 El frontend usa `http://localhost:3000/api` por defecto. Para cambiarlo, copiar `Frontend/.env.example` como `Frontend/.env` y editar `VITE_API_URL`.
 
-Los datos se guardan en Firestore: los productos, usuarios, pedidos y sesiones se mantienen aunque se reinicie el backend.
+Los datos se guardan en Firestore: los productos, categorías, usuarios, pedidos, carritos y sesiones se mantienen aunque se reinicie el backend.
 
 ### Cuentas
 
@@ -33,7 +33,7 @@ Los datos se guardan en Firestore: los productos, usuarios, pedidos y sesiones s
 
 ## Base de datos (Firebase Cloud Firestore)
 
-Solo el backend se conecta a Firestore, con el SDK `firebase-admin`. El frontend no cambia: sigue hablando únicamente con la API. Dentro del backend, la base solo se usa desde la capa **Repositories**; routes, controllers, services y strategies no conocen Firestore.
+Solo el backend se conecta a Firestore, con el SDK `firebase-admin`. El frontend habla únicamente con la API. Dentro del backend, la base solo se usa desde la capa **Repositories**; routes, controllers, services y strategies no conocen Firestore.
 
 ### Configuración (una sola vez)
 
@@ -41,7 +41,7 @@ Solo el backend se conecta a Firestore, con el SDK `firebase-admin`. El frontend
 2. En el menú **Compilación → Firestore Database** → **Crear base de datos**. Elegir una ubicación cercana (por ejemplo `southamerica-east1`, São Paulo) y el **modo de producción**. Ese modo bloquea el acceso directo desde navegadores; el backend no se ve afectado porque `firebase-admin` accede con la cuenta de servicio.
 3. En **Configuración del proyecto** (ícono de engranaje) → **Cuentas de servicio** → **Generar nueva clave privada**. Guardar el archivo descargado como `Backend/firebase-credentials.json`.
 4. Copiar `Backend/.env.example` como `Backend/.env` y completar `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` con los datos que se quieran para el administrador.
-5. Desde `Backend/`, ejecutar `npm run seed` para cargar el catálogo y la cuenta de administrador.
+5. Desde `Backend/`, ejecutar `npm run seed` para cargar las categorías, el catálogo y la cuenta de administrador.
 
 > `Backend/.env` y `Backend/firebase-credentials.json` están en el `.gitignore`: **nunca deben subirse al repositorio**, porque la clave da acceso total a la base.
 
@@ -51,26 +51,30 @@ Al iniciar, el backend comprueba la conexión. Si falta la configuración o la b
 
 | Comando | Qué hace |
 |---------|----------|
-| `npm run seed` | Carga los 11 productos del catálogo ([Backend/src/data/productos.js](Backend/src/data/productos.js)) y el administrador. Si la base ya tiene datos, no hace nada. |
-| `npm run seed -- --reset` | **Borra toda la base** (productos, usuarios, pedidos y sesiones) y la vuelve a cargar. Las cuentas de clientes también se borran. |
+| `npm run seed` | Carga las 4 categorías ([Backend/src/data/categorias.js](Backend/src/data/categorias.js)), los 11 productos del catálogo ([Backend/src/data/productos.js](Backend/src/data/productos.js)) y el administrador. Si la base ya tiene datos, solo agrega las categorías en caso de que falte esa colección (bases creadas antes de que existiera); no modifica nada más. |
+| `npm run seed -- --reset` | **Borra toda la base** (productos, categorías, usuarios, pedidos, carritos y sesiones) y la vuelve a cargar. Las cuentas de clientes también se borran. |
 
 ### Colecciones
 
 | Colección | Documento | Campos |
 |-----------|-----------|--------|
 | `productos` | `productos/{id}` | `id`, `nombre`, `nombreNormalizado`, `descripcion`, `precio`, `stock`, `categoria`, `destacado`, `porEncargo` |
+| `categorias` | `categorias/{id}` | `id`, `nombre` |
 | `usuarios` | `usuarios/{id}` | `id`, `nombre`, `email` (en minúsculas), `contrasena` (hash `salt:hash` con scrypt), `telefono`, `rol` |
 | `pedidos` | `pedidos/{id}` | `id`, `clienteId`, `fecha`, `tipo`, `estado`, `total`, `detalles` (lista de `{ productoId, nombreProducto, precioUnitario, cantidad, subtotal }`), `fechaRetiro`, `montoSenia`, `pagoSenia` (`{ medio, fecha }` o `null`) |
+| `carritos` | `carritos/{clienteId}` | `clienteId`, `items` (lista de `{ productoId, cantidad }`), `actualizadoEn` |
 | `sesiones` | `sesiones/{token}` | `usuarioId`, `creadaEn` |
 | `contadores` | `contadores/{coleccion}` | `ultimoId` |
 
 Decisiones de diseño:
 
 - **IDs numéricos** (`1`, `2`, `3`…) en lugar de los IDs automáticos de Firestore, para mantener la API, la validación de rutas y los números de pedido legibles. Cada colección tiene un documento en `contadores` que se incrementa dentro de una transacción, así dos altas simultáneas nunca reciben el mismo ID.
-- **Converters**: cada repository convierte entre la clase del modelo (`Producto`, `Cliente`/`Administrador` según el `rol`, `Pedido` con sus `DetallePedido`) y el documento de Firestore. Las fechas se guardan como `Timestamp` y la API las sigue devolviendo en formato ISO 8601.
+- **Converters**: cada repository convierte entre la clase del modelo (`Producto`, `Categoria`, `Cliente`/`Administrador` según el `rol`, `Pedido` con sus `DetallePedido`, `Carrito` con sus `ItemCarrito`) y el documento de Firestore. Las fechas se guardan como `Timestamp` y la API las sigue devolviendo en formato ISO 8601.
 - **Detalles dentro del pedido**: las líneas se guardan en el mismo documento porque siempre se leen junto con el pedido y conservan nombre y precio del momento de la compra.
+- **Categoría por nombre en el producto**: cada producto guarda el nombre de su categoría (no su ID), así el catálogo se lee en una sola consulta. Al crear o editar un producto, el service verifica dentro de la transacción que esa categoría exista en la colección `categorias`.
+- **Un carrito por cliente**: el ID del documento es el del cliente. Solo guarda productos y cantidades; al leerlo se completa con el precio y el stock vigentes y se omiten los productos eliminados del catálogo. Al confirmar un pedido, el carrito se vacía en la misma transacción que crea el pedido.
 - **`nombreNormalizado`**: Firestore distingue mayúsculas al comparar, por eso se guarda el nombre en minúsculas para detectar productos duplicados.
-- **Transacciones**: crear un pedido y descontar el stock, cancelarlo y reponer el stock, avanzar un estado, y las altas que verifican duplicados (email, nombre de producto) se hacen en transacciones. Si dos clientes compran el último producto a la vez, solo uno lo consigue y el otro recibe el error de stock insuficiente.
+- **Transacciones**: crear un pedido, descontar el stock y vaciar el carrito, cancelarlo y reponer el stock, avanzar un estado, y las altas que verifican duplicados (email, nombre de producto) se hacen en transacciones. Si dos clientes compran el último producto a la vez, solo uno lo consigue y el otro recibe el error de stock insuficiente.
 - **Sin índices compuestos**: las consultas usan solo filtros por igualdad y el ordenamiento se hace en el service, así no hace falta crear índices en la consola.
 
 ### Alternativa: emulador local
@@ -101,12 +105,12 @@ TpCallipo-PanaderiaLaVictoriosa/
 │       ├── services/       # Lógica de negocio, validaciones y transacciones
 │       ├── strategies/     # Patrón Strategy: reglas y flujo de estados de cada tipo de pedido
 │       ├── repositories/   # Acceso a Firestore: convierten documentos en modelos y viceversa
-│       ├── data/           # Catálogo inicial que carga el seed
+│       ├── data/           # Categorías y catálogo iniciales que carga el seed
 │       ├── routes/         # Definición de endpoints por recurso
 │       ├── middlewares/    # Errores, rutas inexistentes, autenticación/roles y validación de ID
 │       ├── responses/      # Formato consistente de respuestas HTTP
 │       ├── exceptions/     # AppError y sus subclases
-│       ├── enums/          # Mensajes, roles, categorías, tipos/estados de pedido, reglas y colecciones
+│       ├── enums/          # Mensajes, roles, tipos/estados de pedido, reglas y colecciones
 │       └── utils/          # Validadores y hash de contraseñas
 ├── Frontend/
 │   └── src/
@@ -116,7 +120,7 @@ TpCallipo-PanaderiaLaVictoriosa/
 │       ├── components/     # Componentes reutilizables (cards, formularios, modal, toasts…)
 │       ├── pages/          # Pantallas (inicio, catálogo, pedido, cuenta y administración)
 │       ├── services/       # Comunicación con la API (todas las peticiones HTTP)
-│       ├── context/        # Estado global: sesión, pedido en curso y notificaciones
+│       ├── context/        # Estado global: sesión, pedido en curso (carrito) y notificaciones
 │       ├── hooks/          # Hooks reutilizables (carga asíncrona, título de página)
 │       ├── utils/          # Formateo, validaciones y constantes
 │       └── styles/         # Variables de la identidad visual y estilos compartidos
@@ -132,7 +136,8 @@ Entidades identificadas en el análisis del sistema ([Documentacion/analisis-sis
 - **Producto**: artículo del catálogo con precio, stock del día y categoría. `porEncargo` indica que solo se vende como Encargo Especial y `destacado` que aparece en el inicio.
 - **Pedido**: Pedido Regular o Encargo Especial (atributo `tipo`). Guarda el cliente, el estado, el total, la fecha de retiro y la seña.
 - **DetallePedido**: línea de un pedido. Guarda nombre y precio del producto al momento de la compra, para que el historial no cambie si el producto se edita o elimina.
-- **Categoria**: las categorías válidas (Facturas, Panes, Sándwiches, Repostería) están centralizadas en `enums/Categorias.js`.
+- **Categoria**: agrupa los productos del catálogo (Facturas, Panes, Sándwiches, Repostería). Se guardan en la colección `categorias` y solo se aceptan productos de una categoría existente.
+- **Carrito** / **ItemCarrito**: pedido en preparación de un cliente, con los productos y cantidades que eligió y todavía no confirmó. Se guarda en la base, así se conserva entre sesiones y dispositivos.
 
 ### Patrón Strategy para los tipos de pedido
 
@@ -177,7 +182,7 @@ Las rutas protegidas reciben el token devuelto por el login en el header `Author
 | Método | Endpoint       | Acceso        | Descripción |
 |--------|----------------|---------------|-------------|
 | GET    | `/`            | Público       | Obtener todos los productos |
-| GET    | `/categorias`  | Público       | Categorías válidas |
+| GET    | `/categorias`  | Público       | Nombres de las categorías guardadas en la base |
 | GET    | `/:id`         | Público       | Obtener un producto por ID |
 | POST   | `/`            | Administrador | Crear un producto |
 | PUT    | `/:id`         | Administrador | Modificar un producto (actualización parcial) |
@@ -217,11 +222,30 @@ Las rutas protegidas reciben el token devuelto por el login en el header `Author
 
 Cada pedido devuelto incluye además `cliente`, `flujo` (estados de su tipo), `siguienteEstado`, `avanzable`, `cancelable`, `puedePagarSenia` (calculados según el rol de quien consulta) y `saldo` (lo que falta abonar en el local), para que el frontend no repita las reglas de la Strategy.
 
+### Carrito — `/api/carrito`
+
+Guarda el pedido en preparación del cliente logueado. Cada cliente accede solo al suyo (se identifica por el token).
+
+| Método | Endpoint | Acceso  | Descripción |
+|--------|----------|---------|-------------|
+| GET    | `/`      | Cliente | Carrito guardado, con los datos vigentes de cada producto |
+| PUT    | `/`      | Cliente | Reemplaza el carrito completo. Una lista vacía lo vacía. Los productos que ya no existen se omiten |
+| DELETE | `/`      | Cliente | Vacía el carrito |
+
+```json
+{ "items": [{ "productoId": 1, "cantidad": 2 }, { "productoId": 4, "cantidad": 1 }] }
+```
+
+Respuesta de `GET` y `PUT`: `{ "items": [{ "producto": { … }, "cantidad": 2 }], "cantidadTotal": 3, "total": 5600 }`.
+
+En el frontend, el invitado arma el carrito en el navegador (localStorage). Al iniciar sesión como cliente, lo que eligió se suma al carrito guardado en su cuenta y, desde ahí, cada cambio se guarda en la base.
+
 ### Reglas de negocio validadas en el backend
 
 - Campos obligatorios, formato de email, teléfono con al menos 8 dígitos y contraseña de al menos 6 caracteres.
 - No se repiten emails de clientes ni nombres de productos (409).
-- Precio mayor a cero, stock entero mayor o igual a cero y categoría válida.
+- Precio mayor a cero, stock entero mayor o igual a cero y una categoría que exista en la base.
+- El carrito admite cantidades enteras mayores a cero y no repite productos; el stock se valida al confirmar el pedido.
 - Solo el administrador modifica productos, precios, stock y estados de pedidos.
 - Un Pedido Regular no puede superar el stock disponible ni incluir productos por encargo.
 - Un Encargo Especial requiere fecha de retiro con al menos 48 hs de anticipación.
