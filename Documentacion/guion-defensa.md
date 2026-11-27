@@ -67,6 +67,72 @@ Opcional, si sobra tiempo: en **Gestionar productos**, intentar eliminar un prod
 - La información siempre viene del backend; las reglas de negocio se validan en el backend aunque el frontend también valide.
 - Arquitectura: rutas → middlewares → controllers → services → strategies → repositories → Firestore, con errores y mensajes centralizados. Solo los repositories conocen la base de datos.
 
+## Texto para narrar
+
+Leído a ritmo tranquilo dura unos 7 a 8 minutos, con las pausas de la demostración. Entre corchetes, qué mostrar en pantalla.
+
+**Presentación** [inicio de la web]
+
+> Hola. Este es el sistema web de la Panadería La Victoriosa, de Villa Urquiza. El frontend está hecho con React y Vite, y el backend con Node y Express, con arquitectura MVC y la base de datos en Firebase Cloud Firestore. Voy a mostrar un flujo completo: un cliente encarga una torta de cumpleaños, paga la seña y el administrador lo lleva hasta la entrega. Primero el backend, después el frontend y al final el recorrido en la aplicación.
+
+**Backend** [`pedidoRoutes.js`]
+
+> Todo empieza en la ruta POST barra api barra pedidos. Antes de llegar al controller pasa por dos middlewares: `autenticar`, que lee el token Bearer y carga el usuario, y `autorizar`, que deja pasar solo a los clientes. Si falta el token responde 401 y si el rol no corresponde, 403.
+
+[`PedidoController.js`]
+
+> El controller no tiene lógica de negocio: toma el usuario y el body, llama al service y responde con el formato común `success` y `data`. Si algo falla, lo pasa con `next` al middleware de errores.
+
+[`PedidoService.js`, método `crear`]
+
+> La lógica está en el service. Según el tipo de pedido, la fábrica devuelve una estrategia: es el patrón Strategy. Primero valida el formato: que haya productos, que las cantidades sean enteras y positivas y que no se repitan. Después, dentro de una transacción de Firestore, lee los productos, le pide a la estrategia que valide sus reglas, calcula el total y la seña, guarda el pedido y vacía el carrito del cliente. Si es un pedido regular, en la misma transacción descuenta el stock. Así, si dos clientes compran el último producto a la vez, solo uno lo consigue.
+
+[`PedidoEncargoStrategy.js`, y al lado `PedidoRegularStrategy.js`]
+
+> Cada estrategia define su flujo de estados y sus reglas. El encargo exige la fecha de retiro con al menos 48 horas de anticipación, calcula una seña del 50% y no descuenta stock porque se elabora para esa fecha. Además, el administrador no puede confirmarlo a mano: solo lo confirma el pago de la seña. Y con la seña paga, el cliente ya no puede cancelarlo. El pedido regular, en cambio, valida stock y no acepta productos por encargo.
+
+[`pagarSenia` y `avanzarEstado` en el service]
+
+> Pagar la seña valida el medio de pago, verifica que el pedido sea del cliente y que la seña esté pendiente, guarda el pago y pasa el encargo a "Seña confirmada". Avanzar estado, que solo usa el administrador, le pide a la estrategia el siguiente estado, así no se puede saltear ningún paso.
+
+[`PedidoRepository.js`]
+
+> El repository es la única capa que conoce Firestore. Convierte la clase Pedido en un documento y al revés, y el número de pedido sale de un contador que se incrementa dentro de la transacción.
+
+[`Messages.js`, `AppError.js`, `errorHandler.js`]
+
+> Los errores son clases que heredan de AppError, con su código HTTP, y los mensajes están centralizados en un enum. El middleware `errorHandler` los convierte siempre en la misma respuesta: `success false` y un mensaje claro.
+
+**Frontend** [`services/api.js` y `pedidosService.js`]
+
+> En el frontend, todas las peticiones pasan por un único cliente HTTP. Agrega el token, interpreta la respuesta del backend y, si hay error, lanza un ApiError con el mensaje que mandó el servidor. Si la sesión venció, avisa para cerrarla. `pedidosService` expone una función por endpoint.
+
+[`CartProvider.jsx`]
+
+> El carrito es un contexto global. Como invitado se guarda en el navegador; cuando el cliente inicia sesión, se suma al carrito guardado en su cuenta, en Firestore, y desde ahí cada cambio se guarda en la base.
+
+[`CarritoPage.jsx`]
+
+> En la pantalla del pedido, si hay un producto que solo se vende por encargo, el tipo se fuerza a Encargo especial. Antes de enviar valida la fecha para avisar rápido, pero la validación definitiva la hace el backend. Al confirmar, muestra una notificación y lleva a "Mis pedidos" con el pago de la seña abierto.
+
+[`PagoSeniaDialog.jsx`, `OrderCard.jsx`, `AdminPedidosPage.jsx`]
+
+> El modal de la seña muestra la seña, el saldo y el total, y envía el medio elegido. OrderCard se reutiliza en la pantalla del cliente y en la del administrador; dibuja el progreso con el flujo que manda el backend. El backend también indica si el pedido se puede cancelar, avanzar o pagar, así el frontend no repite las reglas.
+
+**Demostración** [navegador]
+
+> Entro al catálogo, filtro Repostería y agrego la torta de cumpleaños. En "Tu pedido" el tipo ya quedó en Encargo especial y muestra la seña del 50%. Como no inicié sesión, el botón me pide ingresar… inicio sesión y vuelvo al pedido con la torta.
+>
+> Pongo como fecha de retiro mañana y confirmo: aparece el error de las 48 horas. Elijo una fecha dentro de tres días y confirmo: el encargo se registra y se abre el pago de la seña. Elijo Mercado Pago y pago. El encargo pasa solo a "Seña confirmada", muestra el medio de pago, el saldo a pagar en el local, y ya no tengo la opción de cancelar.
+>
+> Ahora salgo e ingreso como administrador. En Gestionar pedidos veo el encargo con los datos del cliente. Lo paso a "En preparación", después a "Listo para retirar", y el último botón es "Entregar y cobrar" el saldo. Lo finalizo.
+>
+> Por último, en la consola de Firebase abro la colección pedidos: el documento tiene el estado Finalizado, la seña, el pago y la fecha de retiro. Todo quedó guardado en la base.
+
+**Cierre**
+
+> Resumiendo: la información siempre viene del backend, y las reglas de negocio se validan ahí aunque el frontend también valide para dar una respuesta rápida. La request recorre rutas, middlewares, controller, service, estrategia y repository, con los errores y mensajes centralizados. Gracias.
+
 ## Checklist de entrega
 
 - [ ] Duración entre 5 y 10 minutos.
