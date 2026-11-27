@@ -30,8 +30,10 @@ export function AuthProvider({ children }) {
   }, [guardarSesion])
 
   // Cualquier respuesta 401 del backend cierra la sesión local.
+  // Si llegan varias a la vez, solo la primera avisa: las demás ya no encuentran sesión guardada.
   useEffect(() => {
     const alExpirar = () => {
+      if (!leerStorage(CLAVES_STORAGE.SESION)) return
       guardarSesion(null)
       mostrarInfo('Tu sesión expiró. Volvé a iniciar sesión para continuar.', 'Sesión finalizada')
     }
