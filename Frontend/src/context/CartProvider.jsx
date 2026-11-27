@@ -33,9 +33,11 @@ export function CartProvider({ children }) {
   const { usuario, esCliente, verificando } = useAuth()
   const { mostrarError } = useToast()
   const [items, setItems] = useState(() => leerStorage(CLAVES_STORAGE.CARRITO, []))
-  const [cargando, setCargando] = useState(false)
+  // Cliente cuyo carrito ya se intentó traer de la base (con éxito o no).
+  const [clienteConsultado, setClienteConsultado] = useState(null)
 
   const clienteId = esCliente && !verificando ? usuario.id : null
+  const cargando = clienteId !== null && clienteConsultado !== clienteId
   // Cliente cuyo carrito ya se leyó de la base: recién entonces los cambios se guardan allí.
   const clienteCargado = useRef(null)
   // Evita volver a guardar lo que se acaba de leer de la base.
@@ -47,7 +49,6 @@ export function CartProvider({ children }) {
     let cancelado = false
     const delInvitado = leerStorage(CLAVES_STORAGE.CARRITO, [])
 
-    setCargando(true)
     carritoService.getCarrito()
       .then((carrito) => (
         delInvitado.length > 0 ? carritoService.guardarCarrito(combinar(carrito.items, delInvitado)) : carrito
@@ -63,11 +64,13 @@ export function CartProvider({ children }) {
         if (!cancelado) mostrarError(`No se pudo recuperar tu pedido guardado. ${error.message}`)
       })
       .finally(() => {
-        if (!cancelado) setCargando(false)
+        if (!cancelado) setClienteConsultado(clienteId)
       })
 
     return () => {
       cancelado = true
+      // Al cerrar sesión o cambiar de cuenta, el próximo carrito vuelve a mostrarse como "cargando".
+      setClienteConsultado(null)
     }
   }, [clienteId, mostrarError])
 
