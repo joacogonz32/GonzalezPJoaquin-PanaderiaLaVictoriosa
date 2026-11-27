@@ -288,6 +288,8 @@ React 19 + Vite + React Router. Respeta el boceto ([Documentacion/mockup-la-vict
 | `/admin/productos` | CRUD de productos y stock | Administrador |
 | `/admin/pedidos` | Pedidos de todos los clientes: avanzar estado y rechazar | Administrador |
 
+Si se entra a una pantalla protegida sin sesión, se redirige a "Ingresar" y, al iniciar sesión, se vuelve a esa pantalla. Si el usuario tiene sesión pero otro rol (por ejemplo, un cliente que abre la administración), se muestra la pantalla "Acceso restringido" explicando el motivo.
+
 Cambios justificados respecto del boceto:
 
 - Barra superior oscura con las acciones de la cuenta (ingresar, mis pedidos, salir), para no alterar la navbar original.
